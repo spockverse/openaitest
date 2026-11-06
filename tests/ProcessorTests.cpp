@@ -53,6 +53,21 @@ int main()
     try
     {
         WubrotProcessor p;
+       #if JUCE_WINDOWS
+        for (int size = 0; size < 3; ++size)
+        {
+            const int widths[] { 600, 800, 1000 };
+            p.editorSize.store(size);
+            for (int reopen = 0; reopen < 2; ++reopen)
+            {
+                std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditorIfNeeded());
+                require(editor != nullptr, "native editor creation failed");
+                require(editor->getWidth() == widths[size] && editor->getHeight() == widths[size] * 5 / 6, "native editor size/reopening mismatch");
+                require(!editor->isResizable(), "arbitrary editor resizing must be disabled");
+            }
+        }
+        p.editorSize.store(1);
+       #endif
         p.loadSampleBytes(wav(), "transient-pattern.wav"); waitForSample(p);
         require(p.uiState()["waveform"].size() == 128, "WAV analysis was not published");
         p.setParameterValue("mutate", 100); p.setParameterValue("protect", 0);
