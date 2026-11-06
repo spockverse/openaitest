@@ -1,5 +1,6 @@
 #pragma once
 #include "DnaProfile.h"
+#include "TonalDSP.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -21,11 +22,12 @@ public:
         lowCoefficient = 1 - std::exp(-2 * pi * 120 / static_cast<float>(sampleRate));
         dcCoefficient = std::exp(-2 * pi * 15 / static_cast<float>(sampleRate));
         detectorRelease = std::exp(-1.0f / (.04f * static_cast<float>(sampleRate)));
-        reset();
+        tonal.prepare(sampleRate); reset();
     }
     void reset()
     {
         low.fill(0); held.fill(0); dcInput.fill(0); dcOutput.fill(0); previousDrive.fill(0); colourLow.fill(0); body.fill(0);
+        tonal.reset(); character = .5f;
         phase = 1; primed = false; loopTime = 0; resetModulation();
     }
     void resetModulation() noexcept { retriggerTime = 0; modulation = 0; detector = 0; refractory = 0; retriggerArmed = false; }
@@ -55,9 +57,12 @@ public:
         const bool running = dna != nullptr && (current.mode == 0 || (retriggerArmed && retriggerTime < dna->duration));
         const float env = running ? dna->at(current.mode == 0 ? loopTime : retriggerTime) : 0;
         modulation += modulationCoefficient * (env - modulation);
+        const double dnaTime = current.mode == 0 ? loopTime : retriggerTime;
+        character += modulationCoefficient * ((running ? dna->characterAt(dnaTime) : .5f) - character);
+        const float dnaAmount = running ? current.mutate : 0;
         const float influence = current.mutate * modulation;
-        const float bits = std::clamp(current.bits - 6 * influence, 2.0f, 16.0f);
-        const float rate = std::clamp(current.rate * std::exp2(-3 * influence), 500.0f, static_cast<float>(sampleRate));
+        const float bits = std::clamp(current.bits - 3 * influence, 2.0f, 16.0f);
+        const float rate = std::clamp(current.rate * std::exp2(-1.5f * influence), 500.0f, static_cast<float>(sampleRate));
         const float gain = std::pow(10.0f, current.drive / 20), driveBlend = std::min(1.0f, current.drive / 6);
         const float output = std::pow(10.0f, current.output / 20), steps = std::exp2(bits - 1);
         // XY maps digital destruction into a broad-to-focused spectral emphasis.
@@ -73,6 +78,7 @@ public:
         const float spread = driveBlend * (.6f * crush - .4f * reduction);
         const bool capture = phase >= 1;
         if (capture) phase -= std::floor(phase);
+        std::array<float, 2> dryFrame { frame[0], channels == 2 ? frame[1] : 0 };
         for (std::size_t ch = 0; ch < static_cast<std::size_t>(std::max(0, std::min(channels, 2))); ++ch)
         {
             const float dry = frame[ch];
@@ -94,8 +100,20 @@ public:
             if (capture) held[ch] = std::round(shaped * steps) / steps;
             const float dc = held[ch] - dcInput[ch] + dcCoefficient * dcOutput[ch];
             dcInput[ch] = held[ch]; dcOutput[ch] = dc;
-            const float wet = dc + current.protect * low[ch];
-            frame[ch] = (dry + current.mix * (wet - dry)) * output;
+            frame[ch] = dc;
+        }
+        const float clock = static_cast<float>(std::fmod(current.mode == 1 ? retriggerTime : loopTime, 1000.0));
+        const float sweep = .5f + .5f * std::sin(clock * (4 + 10 * crush) + reduction * 3);
+        const float vowel = std::clamp(.15f + .65f * sweep + .15f * crush + dnaAmount * (.8f * character + .7f * modulation - .65f), 0.0f, 1.0f);
+        const float carrierHz = 60 + 280 * crush + 110 * reduction + 35 * sweep + dnaAmount * (600 * character + 160 * modulation);
+        const float intensity = std::clamp(current.drive / 24, 0.0f, 1.0f);
+        tonal.process(frame, channels, carrierHz, intensity * (.35f + .4f * crush + .2f * dnaAmount),
+                      vowel, 4 + 3 * dnaAmount * character, intensity * (.65f + .3f * dnaAmount));
+        for (int ch = 0; ch < std::min(channels, 2); ++ch)
+        {
+            const auto c = static_cast<std::size_t>(ch);
+            const float wet = softClip(frame[ch]) + current.protect * low[c];
+            frame[ch] = (dryFrame[c] + current.mix * (wet - dryFrame[c])) * output;
         }
         phase += static_cast<double>(rate) / sampleRate;
         loopTime += 1 / sampleRate; retriggerTime += 1 / sampleRate;
@@ -112,5 +130,7 @@ private:
     int refractory = 0;
     bool primed = false, retriggerArmed = false;
     Parameters current;
+    TonalDSP tonal;
+    float character = .5f;
     std::array<float, 2> low {}, held {}, dcInput {}, dcOutput {}, previousDrive {}, colourLow {}, body {};
 };

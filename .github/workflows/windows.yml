@@ -53,3 +53,10 @@ jobs:
           path: build/WUBROT_artefacts/Release/VST3/
           retention-days: 90
           if-no-files-found: error
+      - name: Upload audio comparison WAVs
+        uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-AudioComparisons-0.2.${{ github.run_number }}
+          path: build/AudioComparisons/
+          retention-days: 90
+          if-no-files-found: error

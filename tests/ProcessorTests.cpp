@@ -78,6 +78,14 @@ int main()
         require(restored.editorSize.load() == 2, "editor size did not recall");
         require(restored.uiState()["name"].toString() == "transient-pattern.wav", "sample name did not recall");
         require(render(restored) == withDna, "project recall changed the sound or depends on an external WAV");
+        // New spectral DNA is optional; older saved projects contain envelope only.
+        auto legacyXml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize()));
+        require(legacyXml != nullptr, "state XML missing");
+        legacyXml->removeAttribute("dnaCharacter");
+        juce::MemoryBlock legacyState; juce::AudioProcessor::copyXmlToBinary(*legacyXml, legacyState);
+        WubrotProcessor legacy; legacy.setStateInformation(legacyState.getData(), static_cast<int>(legacyState.getSize()));
+        require(legacy.uiState()["waveform"].size() == 128, "legacy envelope-only DNA was lost");
+        require(!render(legacy).empty(), "legacy project cannot render");
         p.loadSampleBytes(juce::MemoryBlock("not a WAV", 9), "invalid.wav"); waitForSample(p);
         require(p.uiState()["name"].toString() == "transient-pattern.wav", "failed loading discarded working DNA");
         p.loadSampleBytes(wav(true), "silent.wav"); waitForSample(p);

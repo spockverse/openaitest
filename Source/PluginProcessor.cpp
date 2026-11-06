@@ -175,7 +175,7 @@ juce::var WubrotProcessor::uiState()
 void WubrotProcessor::getStateInformation(juce::MemoryBlock& destination)
 {
     const juce::ScopedLock lock(metadataLock);
-    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
+    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
     state.setProperty("sampleName", sampleName, nullptr); state.setProperty("preset", currentPreset.load(), nullptr);
     auto reader = profiles.read();
     if (const auto* profile = reader.get(); profile && profile->valid)
@@ -183,6 +183,8 @@ void WubrotProcessor::getStateInformation(juce::MemoryBlock& destination)
         juce::Array<juce::var> data; for (auto value : profile->envelope) data.add(value);
         state.setProperty("envelope", juce::JSON::toString(juce::var(data), true), nullptr);
         state.setProperty("duration", profile->duration, nullptr);
+        juce::Array<juce::var> characterData; for (auto v : profile->character) characterData.add(v);
+        state.setProperty("dnaCharacter", juce::JSON::toString(juce::var(characterData), true), nullptr);
     }
     if (auto xml = state.createXml()) copyXmlToBinary(*xml, destination);
 }
@@ -205,6 +207,13 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
             profile.envelope[i] = value;
         }
     }
+    const auto characterData = juce::JSON::parse(state["dnaCharacter"].toString());
+    if (auto* array = characterData.getArray(); profile.valid && array && array->size() == static_cast<int>(DnaProfile::bins))
+        for (std::size_t i = 0; i < DnaProfile::bins; ++i)
+        {
+            const float v = static_cast<float>((*array)[static_cast<int>(i)]);
+            profile.character[i] = std::isfinite(v) ? juce::jlimit(0.0f, 1.0f, v) : .5f;
+        }
     const juce::ScopedLock lock(metadataLock); generation.fetch_add(1); presetRequest.store(-1);
     editorSize.store(juce::jlimit(0, 2, static_cast<int>(state.getProperty("editorSize", 1))));
     parameters.replaceState(state); profiles.publish(profile);
