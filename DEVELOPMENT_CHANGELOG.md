@@ -1,3 +1,10 @@
+# UI polish: suppress browser context menus
+
+- Disabled native WebView2 default context menus in the pinned JUCE build and canceled document context-menu defaults from the HTML head. Policy is local to WUBROT's embedded browser; no hooks into FL Studio's wrapper or global keyboard suppression.
+- Right-clicks no longer start knob or region-marker drag gestures. Left-click, keyboard, accessibility, sample loading, layout, DSP and plugin identifiers are preserved.
+- Verified browser right-click defaults on canvas, SVG, images, knobs, markers, power, upload and header/panel elements at all three sizes. Left drags, balanced knob automation gestures, keyboard edits/Tab, sample-loader routes and region editing pass; XY checks pass at 100–200% display scale. The native policy applies idempotently to the pinned JUCE source. Actual FL Studio/WebView2 UI interaction remains a user-side check.
+- Portable Windows development build only; no public release.
+
 # Branding update: reference wordmark and WUBWARE AUDIO
 
 - Replaced the stretched, glowing text title with embedded SVG outlines traced from the supplied geometric wordmark, including its horizontal cuts. All letters, including the final T, fit inside the logo bounds with padding. No external font or asset dependency.

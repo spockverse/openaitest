@@ -43,6 +43,8 @@ target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp
 target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}>
     JUCE_USE_MP3AUDIOFORMAT=1 JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 if(WIN32 AND WUBROT_WEB_UI)
+    include(cmake/WubrotWebViewPolicy.cmake)
+    wubrot_disable_webview_context_menus("${juce_SOURCE_DIR}")
     target_compile_definitions(WUBROT PUBLIC JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1)
 endif()
 if(WUBROT_WEB_UI)
