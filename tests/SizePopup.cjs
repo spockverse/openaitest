@@ -47,8 +47,11 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
             assert.equal(await page.locator('#enginePower').getAttribute('aria-pressed'),String(!!enabled));
             assert(await page.evaluate(() => messages.length===0));
             const boxes = await Promise.all(['#engineStatus','#texture','#motion'].map(s => page.locator(s).boundingBox()));
+            const footer=await page.locator('.bottom').boundingBox(),grid=await page.locator('.grid').boundingBox();
+            const geometry=JSON.stringify({width,height,deviceScaleFactor,enabled,statusLength:status.length,boxes,footer,grid});
+            assert(grid.y+grid.height<=footer.y-4*scale,'main panels overlap footer: '+geometry);
             for (const box of boxes) {
-              assert(box.y+box.height <= height-14*scale, 'footer intrudes into bottom border');
+              assert(box.y+box.height <= height-14*scale, 'footer intrudes into bottom border: '+geometry);
               assert(box.x>=20*scale && box.x+box.width<=width-20*scale);
             }
             assert(boxes[0].x+boxes[0].width<boxes[1].x && boxes[1].x+boxes[1].width<boxes[2].x);

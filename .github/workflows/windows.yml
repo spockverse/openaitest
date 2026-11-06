@@ -72,6 +72,7 @@ jobs:
             }
           }
       - name: Upload browser-only UI check screenshots
+        if: always() && hashFiles('build/EditorScreenshots/*.png') != ''
         uses: actions/upload-artifact@v4
         with:
           name: WUBROT-UI-Checks-0.2.${{ github.run_number }}
