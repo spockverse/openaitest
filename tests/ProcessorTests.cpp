@@ -57,8 +57,10 @@ int main()
         require(p.uiState()["waveform"].size() == 128, "WAV analysis was not published");
         p.setParameterValue("mutate", 100); p.setParameterValue("protect", 0);
         const auto withDna = render(p);
+        p.editorSize.store(2);
         juce::MemoryBlock state; p.getStateInformation(state);
         WubrotProcessor restored; restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        require(restored.editorSize.load() == 2, "editor size did not recall");
         require(restored.uiState()["name"].toString() == "transient-pattern.wav", "sample name did not recall");
         require(render(restored) == withDna, "project recall changed the sound or depends on an external WAV");
         p.loadSampleBytes(juce::MemoryBlock("not a WAV", 9), "invalid.wav"); waitForSample(p);

@@ -438,6 +438,7 @@ if(nativeBackend){
   try{
    if(!dragging&&Number.isFinite(state.x)&&Number.isFinite(state.y))setXY(state.x,state.y,true,1/20);
    for(const id of ['mutate','drive'])if(!nativeTouches.has(id)&&Number.isFinite(state[id]))$(id).value=state[id];
+   if(Number.isInteger(state.editorSize))$('uiSize').selectedIndex=state.editorSize;
    setDnaMode(state.mode,false);controls();$('preset').selectedIndex=state.preset;
    if(Number.isFinite(state.sampleRate)&&state.sampleRate>=8000){displaySampleRate=state.sampleRate;readouts();}
    $('sampleStatus').textContent=state.status;$('drop').classList.toggle('loading',!!state.loading);$('drop').setAttribute('aria-busy',String(!!state.loading));

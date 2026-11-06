@@ -20,7 +20,7 @@ jobs:
       - name: Install pinned WebView2 SDK
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -OutputDirectory webview2 -NonInteractive
       - name: Configure x64 plugin
-        run: cmake -S . -B build -A x64 -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2"
+        run: cmake -S . -B build -A x64 -DWUBROT_VERSION=0.2.${{ github.run_number }} -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2"
       - name: Build plugin and tests
         shell: pwsh
         run: |
@@ -40,7 +40,7 @@ jobs:
       - name: Upload portable development ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-0.2.0-dev.${{ github.run_number }}-Windows-x64
+          name: WUBROT-0.2.${{ github.run_number }}-dev-Windows-x64
           path: build/WUBROT_artefacts/Release/VST3/
           retention-days: 90
           if-no-files-found: error

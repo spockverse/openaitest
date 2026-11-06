@@ -160,7 +160,7 @@ juce::var WubrotProcessor::uiState()
         object->setProperty(id, parameters.getRawParameterValue(id)->load());
     object->setProperty("name", sampleName); object->setProperty("status", status);
     object->setProperty("loading", loading.load()); object->setProperty("preset", currentPreset.load());
-    object->setProperty("sampleRate", runningRate.load());
+    object->setProperty("sampleRate", runningRate.load()); object->setProperty("editorSize", editorSize.load());
     auto p = profiles.read(); juce::Array<juce::var> wave;
     if (const auto* profile = p.get(); profile && profile->valid)
         for (std::size_t i = 0; i < 128; ++i) wave.add(profile->envelope[i * DnaProfile::bins / 128]);

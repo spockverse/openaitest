@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-project(WUBROT VERSION 0.2.0 LANGUAGES C CXX)
+set(WUBROT_VERSION "0.2.0" CACHE STRING "Development build version")
+project(WUBROT VERSION ${WUBROT_VERSION} LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(WUBROT_DSP_ONLY "Build portable tests without JUCE" OFF)
