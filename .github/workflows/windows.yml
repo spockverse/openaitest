@@ -42,6 +42,19 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
+      - name: Compile-check installer with temporary test content
+        shell: pwsh
+        run: |
+          $fixture_root = Join-Path $env:RUNNER_TEMP "wubrot-installer-fixture"
+          python tools/make_installer_fixture.py "$fixture_root"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/validate_factory.py --root "$fixture_root/Resources"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DProjectRoot=$fixture_root" "/DPluginBundle=${{ github.workspace }}\build\WUBROT_artefacts\Release\VST3\WUBROT.vst3" "/DOutputDir=$fixture_root\out" packaging/windows/WUBROT.iss *> installer-test.log
+          $task_installer_status = $LASTEXITCODE
+          Get-Content installer-test.log
+          if ($task_installer_status -ne 0) { python tools/ci_error_annotation.py installer-test.log }
+          exit $task_installer_status
       - name: Upload VST3 development build
         uses: actions/upload-artifact@v4
         with:

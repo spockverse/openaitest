@@ -38,7 +38,7 @@ Resources/
 
 **The three factory WAVs have not been supplied yet.** The directories contain instructions, not substitute audio. Supply each preset's intended WAV at the corresponding `Samples/dna.wav` path. Preset names and settings can be refined when auditioning those samples. Development builds can load your own WAV immediately; factory presets without content report the missing sample instead of pretending to have loaded one.
 
-Installer packaging refuses missing, malformed, silent, or out-of-folder sample references. Check content with:
+Release installer packaging refuses missing, malformed, silent, or out-of-folder sample references. CI separately compile-checks the installer against temporary synthetic test fixtures outside the checkout; that test installer and its audio are never uploaded or shipped. Check content with:
 
 ```sh
 python3 tools/validate_factory.py                  # required for installers
