@@ -63,7 +63,20 @@ void WubrotEditor::handleEvent(const juce::var& event)
             processor.setParameterValue(id, static_cast<float>(event["value"]));
     }
     else if (type == "gesture") processor.parameterGesture(event["id"].toString(), static_cast<bool>(event["start"]));
-    else if (type == "preset") processor.setCurrentProgram(static_cast<int>(event["index"]));
+    else if(type=="preset")
+    {
+        const auto op=event["operation"].toString();
+        if(op=="import"||op=="export")
+        {
+            if(chooser)return;
+            const bool exporting=op=="export";
+            chooser=std::make_unique<juce::FileChooser>(exporting?"Export WUBROT preset":"Import WUBROT preset",juce::File(),"*.wubpreset");
+            auto safe=juce::Component::SafePointer<WubrotEditor>(this);
+            chooser->launchAsync((exporting?juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::warnAboutOverwriting:juce::FileBrowserComponent::openMode)|juce::FileBrowserComponent::canSelectFiles,[safe,event,exporting](const juce::FileChooser& dialog){if(safe){auto file=dialog.getResult();if(file!=juce::File()){if(exporting)file=file.withFileExtension(".wubpreset");auto args=juce::JSON::parse(juce::JSON::toString(event));args.getDynamicObject()->setProperty("operation",exporting?"exportFile":"importFile");args.getDynamicObject()->setProperty("path",file.getFullPathName());if(exporting)args.getDynamicObject()->setProperty("overwrite",file==dialog.getResult());safe->processor.presetCommand(args);}juce::MessageManager::callAsync([safe]{if(safe)safe->chooser.reset();});}});
+        }
+        else if(op.isNotEmpty())processor.presetCommand(event);
+        else processor.setCurrentProgram(static_cast<int>(event["index"]));
+    }
     else if(type=="browse")
     {
         if(chooser)return;
@@ -78,7 +91,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { lastState.clear();lastPlayhead=-1; }
+    else if (type == "ready") { lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
     else if (type == "sample")
     {
         const auto encoded = event["base64"].toString();
@@ -97,6 +110,8 @@ void WubrotEditor::timerCallback()
     const double position=processor.modulationPosition();
     if(std::abs(position-lastPlayhead)>1e-12){auto data=std::make_unique<juce::DynamicObject>();data->setProperty("position",position);browser->emitEventIfBrowserIsVisible("wubrotPlayhead",juce::var(data.release()));lastPlayhead=position;}
     if(++uiTicks%3!=0)return;
+    const auto revision=processor.presetLibraryRevision();
+    if(lastCatalogueRevision!=revision){browser->emitEventIfBrowserIsVisible("wubrotPresetLibrary",processor.presetCatalogue());lastCatalogueRevision=revision;}
     auto state = processor.uiState(); const auto json = juce::JSON::toString(state, true);
     if (lastState != json) { lastState = json; browser->emitEventIfBrowserIsVisible("wubrotState", state); }
 }

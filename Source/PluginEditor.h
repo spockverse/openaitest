@@ -28,6 +28,7 @@ private:
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;
     juce::String lastState;
+    int lastCatalogueRevision=-1;
     int uiTicks=0;double lastPlayhead=-1;
     juce::Label error;
     std::unique_ptr<juce::FileChooser> chooser;

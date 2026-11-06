@@ -39,7 +39,7 @@ juce_add_plugin(WUBROT
     IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE VST3_CATEGORIES Fx Distortion
     NEEDS_WEBVIEW2 ${WUBROT_WEB_UI})
-target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/PresetLibrary.cpp Source/PresetManagement.cpp)
 target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}>
     JUCE_USE_MP3AUDIOFORMAT=1 JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 if(WIN32 AND WUBROT_WEB_UI)
@@ -59,6 +59,13 @@ target_include_directories(WubrotIntegrationTests PRIVATE Source ${juce_SOURCE_D
 target_compile_definitions(WubrotIntegrationTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 WUBROT_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(WubrotIntegrationTests PRIVATE WUBROT)
 add_test(NAME WubrotProcessor COMMAND WubrotIntegrationTests)
+add_executable(WubrotPresetTests tests/PresetTests.cpp)
+target_include_directories(WubrotPresetTests PRIVATE Source ${juce_SOURCE_DIR}/modules)
+target_compile_definitions(WubrotPresetTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+target_link_libraries(WubrotPresetTests PRIVATE WUBROT)
+add_test(NAME WubrotPresets COMMAND WubrotPresetTests)
+set_tests_properties(WubrotPresets PROPERTIES TIMEOUT 90 ENVIRONMENT "WUBROT_CONTENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Resources")
+
 set_tests_properties(WubrotProcessor PROPERTIES ENVIRONMENT "WUBROT_CONTENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Resources")
 if(WIN32 OR (UNIX AND NOT APPLE))
     add_executable(WubrotVst3Smoke tests/Vst3Smoke.cpp)

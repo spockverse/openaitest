@@ -46,6 +46,38 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test tools
+        shell: pwsh
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx playwright install chromium
+          exit $LASTEXITCODE
+      - name: Test embedded editor interactions
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          New-Item -ItemType Directory -Force build/EditorScreenshots | Out-Null
+          $env:WUBROT_SCREENSHOTS = Join-Path $PWD 'build/EditorScreenshots'
+          foreach ($task_test in @('PresetBrowser', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
+            node "tests/$task_test.cjs" *> browser-test-output.log
+            $task_browser_status = $LASTEXITCODE
+            Get-Content browser-test-output.log
+            if ($task_browser_status -ne 0) {
+              python tools/ci_error_annotation.py browser-test-output.log
+              exit $task_browser_status
+            }
+          }
+      - name: Upload browser-only UI check screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-UI-Checks-0.2.${{ github.run_number }}
+          path: build/EditorScreenshots/
+          retention-days: 90
+          if-no-files-found: error
       - name: Upload portable development ZIP
         uses: actions/upload-artifact@v4
         with:

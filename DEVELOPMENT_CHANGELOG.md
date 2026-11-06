@@ -1,3 +1,12 @@
+# Preset browser and portable user library
+
+- Replaced the native preset select with a floating black/purple browser: FACTORY/MY PRESETS tabs, live case-insensitive search, keyboard navigation, 170 ms opening/closing transitions, reduced motion and bounded DOM rendering for large libraries. Active name and an always-visible dirty indicator remain in the existing header position.
+- Added named Save Preset/Save/Save As, rename/delete, native import/export pickers, conflict and delete prompts, Open Preset Folder and Save/Discard/Cancel switching. A processor-side guard catches unsaved changes that arrive between UI refreshes.
+- User presets live in the current OS-resolved Documents/Wubware Audio/WUBROT/Presets folder. Versioned .wubpreset files use validated temporary writes/atomic commits and case-insensitive conflicts; factory files are never managed as user files.
+- Portable presets embed exact active DNA and full temporal/sliced spectral analysis, without original audio. Saved sounds recall exactly; new regions can be edited from the analysis archive and are explicitly labeled as analysis-only. Project states remain independent of preset files and retain the existing original-source behavior when applicable. See PRESETS.md for the format and the distinction between exact saved-region recall and analysis-based new-region editing.
+- Added pinned browser regression checks and browser-only screenshot artifacts to Windows Actions. All six local CTest suites pass, including new CRUD/state/audio/rapid-restore tests. All six browser/motion suites pass, with preset workflows at three sizes and existing XY/footer checks at 100–200% display scaling. Native Windows/FL Studio interaction, pickers, redirected/OneDrive Documents and ACL behavior still require user-side validation.
+- Distortion/DNA algorithm files and all three compiled VST3 class IDs are unchanged. No new automation parameters, installed filename change, installer or public release. Bundled factory settings are preserved; their factory WAVs have not yet been supplied.
+
 # Branding polish: ink-edge subtitle alignment and neon wordmark bloom
 
 - Aligned WUBWARE AUDIO with the vector lettering's visible left edge, accounting for the existing SVG inset at every scale. Subtitle wording, vertical spacing and header/control positions are preserved.

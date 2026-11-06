@@ -2,11 +2,12 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "CrushDSP.h"
 #include "DnaExchange.h"
+#include "PresetLibrary.h"
 
 class WubrotProcessor final : public juce::AudioProcessor, private juce::Timer
 {
 public:
-    WubrotProcessor();
+    explicit WubrotProcessor(juce::File documentsForTests = {});
     ~WubrotProcessor() override;
     void prepareToPlay(double, int) override;
     void releaseResources() override {}
@@ -31,7 +32,7 @@ public:
     void setParameterValue(const juce::String&, float);
     void parameterGesture(const juce::String&, bool);
     void loadSampleBytes(juce::MemoryBlock, juce::String);
-    void loadSampleFile(const juce::File&);
+    void loadSampleFile(const juce::File&, bool factoryPreset = false);
     void clearSample();
     void reportSampleError(const juce::String& message) { setStatus(message); }
     void serviceRegionEdit();
@@ -39,13 +40,45 @@ public:
     juce::var uiState();
     double modulationPosition() const noexcept { return patternPosition.load(); }
     std::atomic<int> editorSize { 1 };
-    bool loadFactoryPreset(int);
+    bool loadFactoryPreset(int,juce::String* error=nullptr);
+    juce::Result saveUserPreset(const juce::String&,bool overwrite=false);
+    juce::Result loadUserPreset(const juce::String& filename);
+    juce::Result renameUserPreset(const juce::String& filename,const juce::String& name,bool overwrite=false);
+    juce::Result deleteUserPreset(const juce::String& filename);
+    juce::Result importPreset(const juce::File&,const juce::String& name,bool overwrite=false);
+    juce::Result exportPreset(const juce::String& filename,const juce::File&,bool overwrite);
+    void presetCommand(const juce::var&);
+    void refreshPresetLibrary();
+    juce::File userPresetDirectory()const { return presetLibrary.directory(); }
+    bool hasUnsavedPresetChanges();
+    juce::var presetCatalogue();
+    int presetLibraryRevision()const noexcept { return libraryRevision.load(); }
+    bool isPresetBusy()const noexcept { return presetBusy.load(); }
     juce::AudioProcessorValueTreeState parameters;
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();
+    juce::ValueTree captureState(bool includeSourceAudio);
+    juce::String soundSignature();
+    void markPresetClean();
+    juce::Result capturePortableState(juce::ValueTree&,juce::String& signature,std::uint64_t& capturedGeneration);
+    void updateDnaKey(const DnaProfile&);
+    PresetLibrary presetLibrary;
+    juce::ThreadPool presetJobs {1};
+    std::atomic<bool> presetBusy {false}, stopping {false}, resetProfileClock {false};
+    juce::String activePresetName {"RIDDIM MONSTER"}, activeUserFile, presetBaseline, dnaKey, dnaOriginKey;
+    juce::String libraryError;
+    juce::Array<juce::var> userPresetEntries;
+    juce::var presetResult;
+    int presetResultSerial=0;
+    std::atomic<int> libraryRevision {0}, presetPending {0};
+    DnaProfile recalledRegion;float recalledStart=0,recalledEnd=1;
+    std::shared_ptr<const WubrotPresetData::Archive> analysisArchive;
+
     void timerCallback() override;
     void decodeSample(std::unique_ptr<juce::InputStream>, const juce::String&, std::uint64_t, bool restoreOnly = false);
     void setStatus(const juce::String&);
+    void setSampleStatus(std::uint64_t,const juce::String&);
+    void finishSampleJob(std::uint64_t,bool factoryPreset=false);
     juce::File factoryRoot() const;
     struct SampleSource { juce::AudioBuffer<float> audio; juce::MemoryBlock wav; double rate=48000; DnaProfile full; };
     static DnaProfile analyseRegion(const SampleSource&, float, float);

@@ -1,4 +1,4 @@
-# WUBROT — Spock Audio
+# WUBROT — WUBWARE AUDIO
 
 WUBROT is a sample-driven bitcrush distortion effect for existing bass audio. It does not generate or layer the loaded sample. Insert it on a mixer/audio track carrying your bass.
 
@@ -6,10 +6,10 @@ WUBROT is a sample-driven bitcrush distortion effect for existing bass audio. It
 
 - **Crush Field X:** move right for fewer bits (16 down to 2).
 - **Crush Field Y:** move up for more sample-rate reduction (the current host sample rate down to 500 Hz). The circular boundary limits the reachable X/Y combinations.
-- **ROT DNA:** drop or browse for a WAV, up to 20 MB. The first 30 seconds are analysed into a normalised envelope. This is a volume/transient pattern, not automatic instrument identification or spectral/formant transfer.
-- **MUTATE:** controls the envelope's influence. At 100%, envelope peaks can subtract up to six bits and reduce the effective rate by up to three octaves, within the crusher's limits. At 0%, DNA has no effect.
+- **ROT DNA:** drop or browse for WAV/MP3 audio, up to 20 MB. The first 30 seconds are analysed for temporal, spectral and harmonic characteristics. The analysis shapes incoming audio; the source is not played as a layer.
+- **MUTATE:** blends the loaded DNA's temporal and harmonic characteristics into input-dependent processing. At 0%, the loaded DNA has no influence.
 - **DRIVE:** adds nonlinear distortion before quantisation. Its antiderivative antialiasing reduces unwanted drive-stage aliasing; the sample-rate crusher's aliasing is intentional. At zero, the drive stage blends out.
-- **LOOP / RETRIGGER:** the compact toggle in ROT DNA selects continuous envelope looping or a one-shot pattern restarted by a bass transient or incoming MIDI note-on. LOOP is the default. Playback uses the analysed sample's original duration; it is not automatically tempo-stretched. LOOP aligns to the DAW timeline while transport plays and runs freely for live input without a running transport.
+- **LOOP / RETRIGGER:** LOOP repeats the selected analysis region while the DAW plays and input is active; RETRIGGER restarts it on bass attacks or MIDI note-on. START/END select the region and SPEED changes the modulation rate. The playhead follows the actual DSP profile position and freezes when stopped or silent. With no host transport information, active live input can drive the profile. No source audio is played.
 
 Bass transient detection uses a fixed threshold and 50 ms guard time; very quiet or continuously sustained sounds may not retrigger as expected. MIDI offers explicit timing when the DAW routes notes to an audio effect. MIDI routing differs between hosts; incoming notes are not passed through the effect.
 
@@ -38,16 +38,16 @@ Resources/
 
 **The three factory WAVs have not been supplied yet.** The directories contain instructions, not substitute audio. Supply each preset's intended WAV at the corresponding `Samples/dna.wav` path. Preset names and settings can be refined when auditioning those samples. Development builds can load your own WAV immediately; factory presets without content report the missing sample instead of pretending to have loaded one.
 
-Release installer packaging refuses missing, malformed, silent, or out-of-folder sample references. CI separately compile-checks the installer against temporary synthetic test fixtures outside the checkout; that test installer and its audio are never uploaded or shipped. Check content with:
+Installer work is deferred. The current delivery is a portable VST3 ZIP, with bundled factory manifests validated by CI. Check content with:
 
 ```sh
 python3 tools/validate_factory.py                  # required for installers
 python3 tools/validate_factory.py --allow-missing  # development manifests only
 ```
 
-On Windows the installer puts the VST3 bundle into `C:\Program Files\Common Files\VST3\WUBROT.vst3` and factory content under `C:\ProgramData\Spock Audio\WUBROT\Presets\Factory`. Each preset's sample remains inside its own folder.
+Factory content is read from the portable VST3 bundle under `Contents/Resources/WubrotContent/Presets/Factory`. User presets are stored separately in the OS-resolved Documents folder, never inside the installed bundle.
 
-For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resources directory**, not to Factory. Installed use requires no variable. Projects embed the analysed envelope, its duration and display name, so the audible DNA survives moving/deleting the source WAV or moving the project to another Windows computer. The original audio file is not embedded or played.
+For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resources directory**, not to Factory. Installed use requires no variable. Projects save the sound and analysis independently of external preset files. Directly loaded source audio retains the existing project embedding behavior for full source-region editing; portable `.wubpreset` files contain analysis only. Source audio is never played as an extra layer.
 
 ## Downloading and replacing development builds
 
@@ -108,3 +108,7 @@ Close FL Studio before updating. Extract the ZIP and replace the entire existing
 The plugin bundle contains the embedded UI, jelly texture and native bridge. Factory manifests and any supplied sample content are copied into Contents/Resources/WubrotContent inside the bundle, which is checked before the legacy ProgramData location. No separate UI folder or installer is needed. Microsoft WebView2 Runtime is still a platform prerequisite for the editor. Factory WAVs are not supplied yet; load your own WAV. The filename, bundle ID, manufacturer code, plugin code, parameter IDs and state format remain stable across development builds.
 
 UI sizes are Small 600×500, Medium 804×670 (default), and Large 996×830 logical pixels. The size selector requests the corresponding native editor size; arbitrary resizing is disabled. The selection persists when reopening the editor and is stored with project state. Windows/FL Studio DPI settings can affect physical pixel dimensions. FL Studio-specific visual validation still requires testing on your machine.
+
+## Preset library
+
+Use the header preset browser to search FACTORY or MY PRESETS. Save Preset, Save, Save As, Rename, Delete, Import, Export and Open Preset Folder are integrated into the floating browser. User files are stored under the actual Windows Documents folder in `Wubware Audio/WUBROT/Presets` and survive VST3 replacements. Portable `.wubpreset` files contain analysis, not the source WAV. See [PRESETS.md](PRESETS.md) for workflow, format, recall behavior and testing limits.
