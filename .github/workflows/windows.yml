@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          cmake -S . -B build -A x64 -DWUBROT_VERSION=0.2.${{ github.run_number }} -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2" *> configure-output.log
+          cmake -S . -B build -A x64 "-DWUBROT_VERSION=0.2.${{ github.run_number }}" -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2" *> configure-output.log
           $task_status = $LASTEXITCODE
           Get-Content configure-output.log
           if ($task_status -ne 0) { python tools/ci_error_annotation.py configure-output.log }
