@@ -77,7 +77,6 @@ The prior Corrosion reference measurements remain useful: almost unchanged RMS,
 retained sub, additional upper harmonics/resonances and original rhythmic structure.
 They motivate the input-derived exciter and moving resonances, not an inferred copy
 of a proprietary algorithm. Listening files are level-matched synthetic probes,
-including a synthesized vocal-like donor, not a genuine human voice. Local extra
-renders process the supplied reference inputs; private recordings are not committed.
+including a synthesized vocal-like donor, not a genuine human voice. User reference recordings and their processed derivatives are excluded from all distributed artifacts.
 Automated measurements are not a guarantee of subjective yoi quality. FL Studio
 listening is still required. Audition WAVs were generated/shared before Windows CI.
