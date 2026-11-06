@@ -68,6 +68,9 @@ public:
         const float focusHz = 700 + 5300 * (1 - crush) + 250 * movement * crush;
         const float colourCoefficient = 1 - std::exp(-2 * pi * focusHz / static_cast<float>(sampleRate));
         const float bodyCoefficient = 1 - std::exp(-2 * pi * 360 / static_cast<float>(sampleRate));
+        // Shape only existing stereo difference: silence and mono remain unchanged.
+        const float side = channels == 2 ? .5f * (frame[0] - frame[1]) : 0;
+        const float spread = driveBlend * (.6f * crush - .4f * reduction);
         const bool capture = phase >= 1;
         if (capture) phase -= std::floor(phase);
         for (std::size_t ch = 0; ch < static_cast<std::size_t>(std::max(0, std::min(channels, 2))); ++ch)
@@ -80,7 +83,7 @@ public:
             const float mid = colourLow[ch] - body[ch];
             // Protect the fundamental while driving its upper harmonics and the midrange harder.
             const float source = dry - current.protect * low[ch];
-            const float emphasis = source + driveBlend * (mid * (1.4f * crush + .5f * reduction)
+            const float emphasis = source + (ch == 0 ? side : -side) * spread + driveBlend * (mid * (1.4f * crush + .5f * reduction)
                                                         + upper * (.8f * reduction) + .25f * body[ch]);
             const float drivenInput = emphasis * gain * (1 + crush * .7f);
             const float delta = drivenInput - previousDrive[ch];
