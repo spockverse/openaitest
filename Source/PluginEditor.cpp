@@ -43,6 +43,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     {
         const int index = juce::jlimit(0, 2, static_cast<int>(event["index"]));
         processor.editorSize.store(index);
+        processor.updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true));
         const int widths[] { 600, 804, 996 }; const int w = widths[index]; setResizeLimits(w, w * 5 / 6, w, w * 5 / 6); setSize(w, w * 5 / 6);
     }
     else if (type == "parameter")
