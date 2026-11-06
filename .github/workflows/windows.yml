@@ -20,10 +20,18 @@ jobs:
       - name: Install pinned WebView2 SDK
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -OutputDirectory webview2 -NonInteractive
       - name: Configure x64 plugin
-        run: cmake -S . -B build -A x64 -DWUBROT_VERSION=0.2.${{ github.run_number }} -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2"
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          cmake -S . -B build -A x64 -DWUBROT_VERSION=0.2.${{ github.run_number }} -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2" *> configure-output.log
+          $task_status = $LASTEXITCODE
+          Get-Content configure-output.log
+          if ($task_status -ne 0) { python tools/ci_error_annotation.py configure-output.log }
+          exit $task_status
       - name: Build plugin and tests
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
           cmake --build build --config Release --parallel 2 *> build-output.log
           $task_build_status = $LASTEXITCODE
           Get-Content build-output.log
@@ -32,6 +40,7 @@ jobs:
       - name: Test audio, project recall and actual VST3 binary
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
           ctest --test-dir build -C Release --output-on-failure *> test-output.log
           $task_test_status = $LASTEXITCODE
           Get-Content test-output.log
