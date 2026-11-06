@@ -1,3 +1,11 @@
+# Branding update: reference wordmark and WUBWARE AUDIO
+
+- Replaced the stretched, glowing text title with embedded SVG outlines traced from the supplied geometric wordmark, including its horizontal cuts. All letters, including the final T, fit inside the logo bounds with padding. No external font or asset dependency.
+- Header subtitle and VST3 manufacturer display name now read WUBWARE AUDIO. Omitted the registered-trademark symbol because registration has not been confirmed.
+- Product/bundle name, bundle ID, manufacturer/plugin codes, parameter IDs, project state and existing storage paths remain unchanged. No DSP, sample editor, control or jelly-physics changes.
+- Portable Windows development artifacts only; no public release or installer.
+- Verified header screenshots at all three sizes and glyph containment/spacing at 100/125/150/200% browser display scales. Region-editor/XY checks pass. All five local processor, audio, content and VST3 suites pass; all three compiled VST3 class IDs match the previous binary. Actual FL Studio UI validation remains a user-side check.
+
 # Compatibility update: audio drops, native browse and synchronized profile cursor
 
 - Added JUCE native file-drop targets, browser payload variants/local-path forwarding, a native WAV/MP3 picker behind the upload button, header-based decoding and explicit errors. MP3 decoding and project-source reopening supported.

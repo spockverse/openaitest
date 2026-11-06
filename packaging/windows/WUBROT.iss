@@ -23,7 +23,7 @@
 AppId={{57554252-4F54-4A55-8345-53504F434B31}
 AppName=WUBROT
 AppVersion={#AppVersion}
-AppPublisher=Spock Audio
+AppPublisher=WUBWARE AUDIO
 DefaultDirName={commonpf64}\Spock Audio\WUBROT
 DisableDirPage=yes
 DisableProgramGroupPage=yes

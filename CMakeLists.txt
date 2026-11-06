@@ -33,7 +33,7 @@ if(WIN32)
 endif()
 option(WUBROT_WEB_UI "Use the approved web editor (requires WebView2 or WebKit)" ${WUBROT_WEB_UI_DEFAULT})
 juce_add_plugin(WUBROT
-    COMPANY_NAME "Spock Audio" BUNDLE_ID "audio.spock.wubrot"
+    COMPANY_NAME "WUBWARE AUDIO" BUNDLE_ID "audio.spock.wubrot"
     PLUGIN_MANUFACTURER_CODE Spck PLUGIN_CODE Wbrt
     FORMATS ${WUBROT_FORMATS} PRODUCT_NAME "WUBROT"
     IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE
