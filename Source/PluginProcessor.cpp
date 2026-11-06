@@ -170,7 +170,7 @@ juce::var WubrotProcessor::uiState()
 void WubrotProcessor::getStateInformation(juce::MemoryBlock& destination)
 {
     const juce::ScopedLock lock(metadataLock);
-    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.setProperty("version", 1, nullptr);
+    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
     state.setProperty("sampleName", sampleName, nullptr); state.setProperty("preset", currentPreset.load(), nullptr);
     auto reader = profiles.read();
     if (const auto* profile = reader.get(); profile && profile->valid)
@@ -201,6 +201,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
         }
     }
     const juce::ScopedLock lock(metadataLock); generation.fetch_add(1); presetRequest.store(-1);
+    editorSize.store(juce::jlimit(0, 2, static_cast<int>(state.getProperty("editorSize", 1))));
     parameters.replaceState(state); profiles.publish(profile);
     sampleName = profile.valid ? state["sampleName"].toString() : juce::String();
     currentPreset.store(juce::jlimit(0, 2, static_cast<int>(state["preset"])));

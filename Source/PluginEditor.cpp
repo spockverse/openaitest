@@ -31,13 +31,21 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
         error.setText("WUBROT audio is running. Install Microsoft Edge WebView2 Runtime, then reopen the editor.", juce::dontSendNotification);
         error.setJustificationType(juce::Justification::centred); addAndMakeVisible(error);
     }
-    setResizable(true, false); setResizeLimits(760, 600, 1800, 1500); setSize(1120, 920);
+    setResizable(false, false);
+    const int widths[] { 600, 800, 1000 };
+    const int width = widths[processor.editorSize.load()]; setSize(width, width * 5 / 6);
 }
 void WubrotEditor::resized() { if (browser) browser->setBounds(getLocalBounds()); error.setBounds(getLocalBounds().reduced(40)); }
 void WubrotEditor::handleEvent(const juce::var& event)
 {
     const auto type = event["type"].toString();
-    if (type == "parameter")
+    if (type == "uiSize")
+    {
+        const int index = juce::jlimit(0, 2, static_cast<int>(event["index"]));
+        processor.editorSize.store(index);
+        const int widths[] { 600, 800, 1000 }; setSize(widths[index], widths[index] * 5 / 6);
+    }
+    else if (type == "parameter")
     {
         const auto id = event["id"].toString();
         if (id == "x" || id == "y" || id == "mutate" || id == "drive" || id == "mode")

@@ -1,11 +1,6 @@
 name: Build WUBROT Windows
 on:
   workflow_dispatch:
-    inputs:
-      package_installer:
-        description: Build setup.exe (requires all three supplied factory WAVs)
-        type: boolean
-        default: false
   push:
     branches: [main, work, "wubrot/**"]
   pull_request:
@@ -42,38 +37,10 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
-      - name: Compile-check installer with temporary test content
-        shell: pwsh
-        run: |
-          $fixture_root = Join-Path $env:RUNNER_TEMP "wubrot-installer-fixture"
-          python tools/make_installer_fixture.py "$fixture_root"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/validate_factory.py --root "$fixture_root/Resources"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DProjectRoot=$fixture_root" "/DPluginBundle=${{ github.workspace }}\build\WUBROT_artefacts\Release\VST3\WUBROT.vst3" "/DOutputDir=$fixture_root\out" packaging/windows/WUBROT.iss *> installer-test.log
-          $task_installer_status = $LASTEXITCODE
-          Get-Content installer-test.log
-          if ($task_installer_status -ne 0) { python tools/ci_error_annotation.py installer-test.log }
-          exit $task_installer_status
-      - name: Upload VST3 development build
+      - name: Upload portable development ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-Windows-VST3
+          name: WUBROT-0.2.0-dev.${{ github.run_number }}-Windows-x64
           path: build/WUBROT_artefacts/Release/VST3/
-          if-no-files-found: error
-      - name: Require real factory samples for installer
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
-        run: python tools/validate_factory.py
-      - name: Build Windows installer
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
-        shell: pwsh
-        run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DProjectRoot=${{ github.workspace }}" "/DPluginBundle=${{ github.workspace }}\build\WUBROT_artefacts\Release\VST3\WUBROT.vst3" "/DOutputDir=${{ github.workspace }}\dist" packaging/windows/WUBROT.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload setup.exe
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: WUBROT-Windows-Installer
-          path: dist/WUBROT-Setup-*.exe
+          retention-days: 90
           if-no-files-found: error

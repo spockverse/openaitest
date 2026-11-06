@@ -53,7 +53,7 @@ body{padding:12px;background:#08080c}.shell{max-width:1440px;padding:35px 32px 2
    <section class="panel engine"><h2>WARPING ENGINE</h2><div class="knobs"><div class="knob-control"><label for="mutate">MUTATE</label><div class="dial" id="mutateDial" aria-hidden="true"></div><input type="range" id="mutate" min="0" max="100" value="67"><output id="mutateValue" for="mutate">67%</output></div><div class="knob-control"><label for="drive">DRIVE</label><div class="dial" id="driveDial" aria-hidden="true"></div><input type="range" id="drive" min="0" max="36" step="0.1" value="8.5"><output id="driveValue" for="drive">8.5 dB</output></div></div></section>
   </div>
  </div>
- <footer class="bottom"><span class="status">UI PREVIEW</span><span class="hint" id="texture">48 kHz / STEREO · UI STUDY</span><button class="mini" id="motion" aria-pressed="true">ANIMATION / ON</button></footer>
+ <footer class="bottom"><select id="uiSize" aria-label="Interface size" style="background:#201725;color:#d9b6ed;border:1px solid #755185;border-radius:4px;font:10px monospace"><option>Small</option><option selected>Medium</option><option>Large</option></select><span class="status">UI PREVIEW</span><span class="hint" id="texture">48 kHz / STEREO · UI STUDY</span><button class="mini" id="motion" aria-pressed="true">ANIMATION / ON</button></footer>
 </main>
 <p class="notice"><strong>Interactive UI study — no audio processing or playback yet.</strong> Files stay on your computer. Sample loading analyses a waveform to shape the visuals; it does not play or upload your sample. Liquid motion is a lightweight spring animation, independent of the XY control position. Maximum WAV size: 20 MB; first 30 seconds analysed.</p>
 <script id="gel-physics">
@@ -429,8 +429,9 @@ if(nativeBackend){
  $('filename').textContent='WAV LOADER: DROP YOUR SAMPLE ↥';document.querySelector('.status').textContent='ENGINE ACTIVE';
  const notice=document.querySelector('.notice');notice.style.display='none';
  // Fit the existing artwork to a resizable plugin window, without adding panels.
- const style=document.createElement('style');style.textContent='body{padding:0;overflow:hidden}.shell{position:absolute;left:0;top:0;width:1200px;max-width:none;transform-origin:top left}';document.head.appendChild(style);
- const fit=()=>{const shell=document.querySelector('.shell');const height=shell.offsetHeight;shell.style.transform=`scale(${Math.min(innerWidth/1200,innerHeight/height)})`;};
+ for(const sheet of document.styleSheets){try{for(let i=sheet.cssRules.length-1;i>=0;i--){const rule=sheet.cssRules[i];if(rule.media&&/width/.test(rule.conditionText))sheet.deleteRule(i);}}catch(e){}}
+ const style=document.createElement('style');style.textContent='body{padding:0;overflow:hidden}.shell{position:absolute;left:0;top:0;width:1200px;height:1000px;max-width:none;transform-origin:top left}.brand{font-size:78px}.maker{font-size:24px}.filename{font-size:14px}.xybox{width:94%;margin:-7px auto -6px}.dna{flex:0 0 47%}.axis-y{left:-4px}';document.head.appendChild(style);
+ const fit=()=>{const shell=document.querySelector('.shell');shell.style.width='1200px';shell.style.height='1000px';shell.style.boxSizing='border-box';shell.style.transform=`scale(${innerWidth/1200},${innerHeight/1000})`;};
  new ResizeObserver(fit).observe(document.querySelector('.shell'));window.addEventListener('resize',fit);fit();
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;
@@ -445,6 +446,7 @@ if(nativeBackend){
    drawWave();$('texture').textContent=(state.sampleRate/1000).toFixed(1)+' kHz / STEREO';
   }finally{applyingNative=false;}
  });
+ $('uiSize').onchange=()=>nativeEvent('uiSize',{index:$('uiSize').selectedIndex});
  nativeEvent('ready');
 }
 syncButtons();readouts();controls();drawWave();schedule();

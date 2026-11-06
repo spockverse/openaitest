@@ -97,3 +97,13 @@ python3 tests/test_factory.py
 ## Framework licensing
 
 JUCE has AGPL/commercial licensing terms. Check the appropriate JUCE licence before distributing a closed-source product. The VST3 SDK and platform dependencies retain their own licences. Factory samples must be ones you can include with the product. This project does not supply a JUCE commercial licence, proprietary samples or Windows signing certificates.
+
+## Portable development updates and rollback
+
+Windows development builds are ZIP artifacts, not installers or public releases. Open the repository's **Actions → Build WUBROT Windows**, open a successful run, and download **WUBROT-0.2.0-dev.RUNNUMBER-Windows-x64** under **Artifacts**. The run number is the development build version. GitHub retains each artifact for 90 days; download older ZIPs locally for longer-term rollback. No public releases are created automatically.
+
+Close FL Studio before updating. Extract the ZIP and replace the entire existing `C:\Program Files\Common Files\VST3\WUBROT.vst3` folder with its new counterpart. Do not rename it or leave versioned copies in your scanned VST3 folders. Use the same process with an older ZIP to roll back. Back up projects before opening them in newer development versions.
+
+The plugin bundle contains the embedded UI, jelly texture and native bridge. No separate UI folder or installer is needed. Microsoft WebView2 Runtime is still a platform prerequisite for the editor. Factory WAVs are not supplied yet; load your own WAV. The filename, bundle ID, manufacturer code, plugin code, parameter IDs and state format remain stable across development builds.
+
+UI sizes are Small 600×500, Medium 800×667 (default), and Large 1000×833 logical pixels. The size selector requests the corresponding native editor size; arbitrary resizing is disabled. The selection persists when reopening the editor and is stored with project state. Windows/FL Studio DPI settings can affect physical pixel dimensions. FL Studio-specific visual validation still requires testing on your machine.

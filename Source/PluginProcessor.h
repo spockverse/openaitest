@@ -35,6 +35,7 @@ public:
     void clearSample();
     bool isLoading() const noexcept { return loading.load(); }
     juce::var uiState();
+    std::atomic<int> editorSize { 1 };
     bool loadFactoryPreset(int);
     juce::AudioProcessorValueTreeState parameters;
 private:
