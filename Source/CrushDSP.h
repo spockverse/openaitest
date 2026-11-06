@@ -25,7 +25,7 @@ public:
     }
     void reset()
     {
-        low.fill(0); held.fill(0); dcInput.fill(0); dcOutput.fill(0); previousDrive.fill(0);
+        low.fill(0); held.fill(0); dcInput.fill(0); dcOutput.fill(0); previousDrive.fill(0); colourLow.fill(0); body.fill(0);
         phase = 1; primed = false; loopTime = 0; resetModulation();
     }
     void resetModulation() noexcept { retriggerTime = 0; modulation = 0; detector = 0; refractory = 0; retriggerArmed = false; }
@@ -60,13 +60,29 @@ public:
         const float rate = std::clamp(current.rate * std::exp2(-3 * influence), 500.0f, static_cast<float>(sampleRate));
         const float gain = std::pow(10.0f, current.drive / 20), driveBlend = std::min(1.0f, current.drive / 6);
         const float output = std::pow(10.0f, current.output / 20), steps = std::exp2(bits - 1);
+        // XY maps digital destruction into a broad-to-focused spectral emphasis.
+        // All motion changes processing coefficients; no oscillator or sample is mixed into audio.
+        const float crush = (16 - bits) / 14;
+        const float reduction = 1 - std::clamp(rate / static_cast<float>(sampleRate), 0.0f, 1.0f);
+        const float movement = std::sin(static_cast<float>(std::fmod(loopTime, 1000.0)) * (1.1f + reduction * 3));
+        const float focusHz = 700 + 5300 * (1 - crush) + 250 * movement * crush;
+        const float colourCoefficient = 1 - std::exp(-2 * pi * focusHz / static_cast<float>(sampleRate));
+        const float bodyCoefficient = 1 - std::exp(-2 * pi * 360 / static_cast<float>(sampleRate));
         const bool capture = phase >= 1;
         if (capture) phase -= std::floor(phase);
         for (std::size_t ch = 0; ch < static_cast<std::size_t>(std::max(0, std::min(channels, 2))); ++ch)
         {
             const float dry = frame[ch];
             low[ch] += lowCoefficient * (dry - low[ch]);
-            const float source = dry - current.protect * low[ch], drivenInput = source * gain;
+            body[ch] += bodyCoefficient * (dry - body[ch]);
+            colourLow[ch] += colourCoefficient * (dry - colourLow[ch]);
+            const float upper = dry - colourLow[ch];
+            const float mid = colourLow[ch] - body[ch];
+            // Protect the fundamental while driving its upper harmonics and the midrange harder.
+            const float source = dry - current.protect * low[ch];
+            const float emphasis = source + driveBlend * (mid * (1.4f * crush + .5f * reduction)
+                                                        + upper * (.8f * reduction) + .25f * body[ch]);
+            const float drivenInput = emphasis * gain * (1 + crush * .7f);
             const float delta = drivenInput - previousDrive[ch];
             const float driven = std::abs(delta) > .001f ? (primitive(drivenInput) - primitive(previousDrive[ch])) / delta
                                                         : softClip((drivenInput + previousDrive[ch]) * .5f);
@@ -93,5 +109,5 @@ private:
     int refractory = 0;
     bool primed = false, retriggerArmed = false;
     Parameters current;
-    std::array<float, 2> low {}, held {}, dcInput {}, dcOutput {}, previousDrive {};
+    std::array<float, 2> low {}, held {}, dcInput {}, dcOutput {}, previousDrive {}, colourLow {}, body {};
 };

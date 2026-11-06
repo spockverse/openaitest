@@ -43,8 +43,36 @@ void checkDna()
     for (int i = 0; i < 2000; ++i) { DnaProfile next; next.valid = true; next.duration = 1; next.envelope.fill(static_cast<float>(i % 100) / 100); exchange.publish(next); }
     finished.store(true); audio.join(); check(consistent.load(), "profile publication must never expose partially-written data");
 }
+// Musical source coverage without DNA: sustained sub, short bass stab, drum transient,
+// and a clean saw. Test useful nonlinear harmonics, silence and bounded peaks.
+void checkMusicalSources()
+{
+    constexpr double sr = 48000, tau = 6.283185307179586;
+    for (int source = 0; source < 4; ++source)
+    {
+        CrushDSP dsp; dsp.prepare(sr); CrushDSP::Parameters p;
+        p.mix = 1; p.drive = 24; p.bits = 7; p.rate = 7000; p.protect = 1;
+        double error = 0, energy = 0, fundamental = 0, third = 0;
+        for (int i = 0; i < 48000; ++i)
+        {
+            const double t = i / sr;
+            const float sine = .4f * static_cast<float>(std::sin(tau * 80 * t));
+            float input = sine;
+            if (source == 1) input *= static_cast<float>(std::exp(-12 * std::fmod(t, .25)));
+            if (source == 2) input = .7f * static_cast<float>(std::exp(-40 * std::fmod(t, .25)) * std::sin(tau * (70 * t + 4 * (1 - std::exp(-20 * std::fmod(t, .25))))));
+            if (source == 3) input = .3f * static_cast<float>(2 * std::fmod(t * 110, 1.0) - 1);
+            float frame[] { input, input }; dsp.processFrame(frame, 2, p);
+            check(std::isfinite(frame[0]) && std::abs(frame[0]) < 1.5f, "musical sources must have bounded development-preset peaks");
+            error += (frame[0] - input) * (frame[0] - input); energy += frame[0] * frame[0];
+            fundamental += frame[0] * std::sin(tau * 80 * t); third += frame[0] * std::sin(tau * 240 * t);
+        }
+        check(error > 10 && energy > 10, "each source must produce substantial distortion without DNA");
+        if (source == 0) check(std::abs(third) > .02 * std::abs(fundamental), "protected sub must still develop audible upper harmonics");
+    }
+}
 int main()
 {
+    checkMusicalSources();
     checkDna();
     constexpr double pi = 3.141592653589793;
     for (double sampleRate : { 44100.0, 48000.0, 96000.0 })
