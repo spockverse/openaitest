@@ -1,3 +1,11 @@
+# Master power visual shutdown
+
+- Existing enabled/power state now drives one centralized OFF material/lighting theme: dark neutral metals, extinguished logo/ROT DNA/control glows, an unlit power ring and ENGINE OFF status. The glossy field retains its detailed surface; no full-UI overlay or flat replacement circle.
+- A one-time WebGL-to-2D surface snapshot retains the exact deformed material. Physics, membrane inertia, idle time, orb/corona animation phases and the visual DNA playhead freeze without resetting. RAF and redundant waveform draws stop; latest host state continues to arrive. Power-up resumes with current parameters and actual profile position, without a missing-frame flash or accumulated elapsed time.
+- Lighting transitions take 240 ms and respect reduced motion. Powered-ON rendering uses no added whole-interface filter. Presets, size controls, uploads and manual parameter changes remain usable while unlit; frozen XY visuals catch up on resume.
+- Initial native state is applied before showing the editor, so saved OFF instances restore the correct grey material/XY position without flashing ON. Added browser tests cover all three sizes, native recall/automation, paused animation clocks, no repeated rendering, live controls and Canvas fallback; screenshot pixels are neutral grey. Existing native/DSP/parameter code is unchanged.
+- Portable Windows development ZIP only; no public release. Actual FL Studio visual interaction remains user-side verification.
+
 # Preset browser and portable user library
 
 - Replaced the native preset select with a floating black/purple browser: FACTORY/MY PRESETS tabs, live case-insensitive search, keyboard navigation, 170 ms opening/closing transitions, reduced motion and bounded DOM rendering for large libraries. Active name and an always-visible dirty indicator remain in the existing header position.

@@ -2,6 +2,10 @@
 
 WUBROT is a sample-driven bitcrush distortion effect for existing bass audio. It does not generate or layer the loaded sample. Insert it on a mixer/audio track carrying your bass.
 
+## Master power
+
+The existing power button retains its click-free dry bypass. OFF also extinguishes the lighting, turns the reflective materials metallic grey and freezes decorative animation and the visual DNA playhead. Preset browsing, size selection, file loading and controls remain functional. Powering back ON restores the original lighting and resumes visualization from the current settings. This uses the existing automatable enabled state; no audio-processing or parameter-identity changes.
+
 ## Controls
 
 - **Crush Field X:** move right for fewer bits (16 down to 2).
