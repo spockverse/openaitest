@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "LIQUID GLASS",
+  "sample": "Samples/dna.wav",
+  "parameters": {
+    "x": -0.45,
+    "y": 0.25,
+    "mutate": 55,
+    "drive": 4,
+    "mode": 0,
+    "mix": 100,
+    "output": -6,
+    "protect": true
+  }
+}

@@ -1,0 +1,53 @@
+name: Build WUBROT Windows
+on:
+  workflow_dispatch:
+    inputs:
+      package_installer:
+        description: Build setup.exe (requires all three supplied factory WAVs)
+        type: boolean
+        default: false
+  push:
+    branches: [main, work, "wubrot/**"]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check preset manifests
+        run: python tools/validate_factory.py --allow-missing
+      - name: Install pinned WebView2 SDK
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -OutputDirectory webview2 -NonInteractive
+      - name: Configure x64 plugin
+        run: cmake -S . -B build -A x64 -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2"
+      - name: Build plugin and tests
+        run: cmake --build build --config Release --parallel 2
+      - name: Test audio and project recall
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Upload VST3 development build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-Windows-VST3
+          path: build/WUBROT_artefacts/Release/VST3/
+          if-no-files-found: error
+      - name: Require real factory samples for installer
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
+        run: python tools/validate_factory.py
+      - name: Build Windows installer
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DProjectRoot=${{ github.workspace }}" "/DPluginBundle=${{ github.workspace }}\build\WUBROT_artefacts\Release\VST3\WUBROT.vst3" "/DOutputDir=${{ github.workspace }}\dist" packaging/windows/WUBROT.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload setup.exe
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package_installer }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-Windows-Installer
+          path: dist/WUBROT-Setup-*.exe
+          if-no-files-found: error

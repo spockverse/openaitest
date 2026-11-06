@@ -1,0 +1,7 @@
+/build/
+/out/
+/.vs/
+*.user
+/dist/
+/webview2/
+__pycache__/

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "RIDDIM MONSTER",
+  "sample": "Samples/dna.wav",
+  "parameters": {
+    "x": 0.3,
+    "y": -0.2,
+    "mutate": 80,
+    "drive": 12,
+    "mode": 0,
+    "mix": 100,
+    "output": -6,
+    "protect": true
+  }
+}
