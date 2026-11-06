@@ -26,7 +26,7 @@ There are no free-running carrier phases, vowel LFOs or tone generators in the
 audio path. A waveform-dependent sine of atan(input) is a bounded transfer curve,
 not an oscillator. Envelope attack/release, transient contrast and live brightness
 move the resonances. Steady periodic inputs can settle; they are not forced through
-a recurring vowel cycle. Digital silence clears residual filter history after 80ms.
+a recurring vowel cycle. Digital silence fades residual history smoothly over the final 20ms of an 80ms tail, then clears it.
 Minimum-phase oversampling introduces filtering phase, not a fixed block delay.
 There is no added lookahead or new host parameter. Deliberate crusher aliasing is
 preserved; the nonlinear shaper's unwanted folding is treated separately.

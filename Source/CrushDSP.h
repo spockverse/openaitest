@@ -104,7 +104,9 @@ public:
             // No post-crusher hard clip: retain generated harmonics and intentional
             // crusher edges without another alias-generating nonlinear stage.
             const float coloured=frame[ch]*(.65f+.35f*activity);
-            const float wet=(silentFrames>=tail?0:coloured+current.protect*low[c]);
+            const float release=std::clamp(static_cast<float>(tail-silentFrames)/static_cast<float>(sampleRate*.02),0.0f,1.0f);
+            const float tailGain=release*release*(3-2*release);
+            const float wet=(coloured+current.protect*low[c])*tailGain;
             const float processed=(dry[c]+current.mix*(wet-dry[c]))*output;
             frame[ch]=bypassWet<=0?original[c]:bypassWet>=1?processed:original[c]+bypassWet*(processed-original[c]);
         }
