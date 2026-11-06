@@ -49,16 +49,17 @@ On Windows the installer puts the VST3 bundle into `C:\Program Files\Common File
 
 For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resources directory**, not to Factory. Installed use requires no variable. Projects embed the analysed envelope, its duration and display name, so the audible DNA survives moving/deleting the source WAV or moving the project to another Windows computer. The original audio file is not embedded or played.
 
-## Getting a Windows build without compiling yourself
+## Downloading and replacing development builds
 
-The project files must be committed and pushed to GitHub first. Environment publication does not push them.
+Open this repository's **Actions → Build WUBROT Windows**. Select a successful run and download **WUBROT-0.2.RUNNUMBER-dev-Windows-x64** from **Artifacts** at the bottom of the run page. GitHub downloads it as a ZIP. Each run has a unique version number; previous ZIPs remain available for 90 days. Download local backups for longer-term rollback. No installer or public release is created automatically.
 
-1. On the repository's **Actions** tab, run **Build WUBROT Windows**.
-2. A successful run provides **WUBROT-Windows-VST3**. Extract it and copy the entire `WUBROT.vst3` bundle into the VST3 directory above. It is an effect, not an instrument.
-3. In FL Studio, use **Options → Manage plugins → Find installed plugins**, then add WUBROT to a mixer effect slot carrying your bass.
-4. To create `WUBROT-Setup-0.2.0.exe`, provide the three WAVs, run the workflow with **package_installer** enabled, and download **WUBROT-Windows-Installer**.
+1. Close FL Studio and any other DAW using WUBROT.
+2. Extract the ZIP. Remove/replace the old outer `C:\Program Files\Common Files\VST3\WUBROT.vst3` folder with the new outer **WUBROT.vst3 folder**, including all its contents.
+3. Reopen FL Studio. Do not rename the installed folder or leave versioned copies in scanned plugin directories. If WUBROT is not listed, use **Options → Manage plugins → Find installed plugins**.
 
-The editor requires the Microsoft Edge WebView2 Evergreen Runtime, normally present on current Windows systems. If absent, install it from Microsoft's WebView2 page and reopen the editor. The installer offers a link; it does not bundle or silently download this Microsoft runtime. No proprietary factory WAVs or signing credentials are included in this source checkout.
+To roll back, repeat these steps using an older downloaded ZIP. Back up your projects before testing development updates. Internal plugin identity, parameter IDs and the existing project-state format remain stable.
+
+The UI and jelly artwork are embedded in the plugin; no separate HTML/UI installation is needed. Factory content is bundled under Contents/Resources/WubrotContent. The Windows WebView2 Runtime remains a system prerequisite for the editor (already present on most current Windows machines). The three factory WAVs have not been supplied yet; load your own WAV into ROT DNA for now. Installer work is deferred.
 
 ## Windows DAW support
 
