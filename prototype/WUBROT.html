@@ -431,7 +431,7 @@ if(nativeBackend){
  // Fit the existing artwork to a resizable plugin window, without adding panels.
  for(const sheet of document.styleSheets){try{for(let i=sheet.cssRules.length-1;i>=0;i--){const rule=sheet.cssRules[i];if(rule.media&&/width/.test(rule.conditionText))sheet.deleteRule(i);}}catch(e){}}
  const style=document.createElement('style');style.textContent='body{padding:0;overflow:hidden}.shell{position:absolute;left:0;top:0;width:1200px;height:1000px;max-width:none;transform-origin:top left}.brand{font-size:78px}.maker{font-size:24px}.filename{font-size:14px}.xybox{width:94%;margin:-7px auto -6px}.dna{flex:0 0 47%}.axis-y{left:-4px}';document.head.appendChild(style);
- const fit=()=>{const shell=document.querySelector('.shell');shell.style.width='1200px';shell.style.height='1000px';shell.style.boxSizing='border-box';shell.style.transform=`scale(${innerWidth/1200},${innerHeight/1000})`;};
+ const fit=()=>{const shell=document.querySelector('.shell');shell.style.width='1200px';shell.style.height='1000px';shell.style.boxSizing='border-box';shell.style.transform=`scale(${innerWidth/1200})`;};
  new ResizeObserver(fit).observe(document.querySelector('.shell'));window.addEventListener('resize',fit);fit();
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;

@@ -32,7 +32,7 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
         error.setJustificationType(juce::Justification::centred); addAndMakeVisible(error);
     }
     setResizable(false, false);
-    const int widths[] { 600, 800, 1000 };
+    const int widths[] { 600, 804, 996 };
     const int width = widths[processor.editorSize.load()]; setResizeLimits(width, width * 5 / 6, width, width * 5 / 6); setSize(width, width * 5 / 6);
 }
 void WubrotEditor::resized() { if (browser) browser->setBounds(getLocalBounds()); error.setBounds(getLocalBounds().reduced(40)); }
@@ -43,7 +43,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     {
         const int index = juce::jlimit(0, 2, static_cast<int>(event["index"]));
         processor.editorSize.store(index);
-        const int widths[] { 600, 800, 1000 }; const int w = widths[index]; setResizeLimits(w, w * 5 / 6, w, w * 5 / 6); setSize(w, w * 5 / 6);
+        const int widths[] { 600, 804, 996 }; const int w = widths[index]; setResizeLimits(w, w * 5 / 6, w, w * 5 / 6); setSize(w, w * 5 / 6);
     }
     else if (type == "parameter")
     {
@@ -68,7 +68,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
 void WubrotEditor::timerCallback()
 {
     if (!browser || !isShowing()) return;
-    const int widths[] { 600, 800, 1000 };
+    const int widths[] { 600, 804, 996 };
     const int preferred = widths[juce::jlimit(0, 2, processor.editorSize.load())];
     if (getWidth() != preferred || getHeight() != preferred * 5 / 6)
     {

@@ -56,7 +56,7 @@ int main()
        #if JUCE_WINDOWS
         for (int size = 0; size < 3; ++size)
         {
-            const int widths[] { 600, 800, 1000 };
+            const int widths[] { 600, 804, 996 };
             p.editorSize.store(size);
             for (int reopen = 0; reopen < 2; ++reopen)
             {
