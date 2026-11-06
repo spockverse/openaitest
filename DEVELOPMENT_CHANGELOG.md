@@ -1,3 +1,10 @@
+# Visual-only update: attached orb corona and keyboard focus
+
+- Separated the stable corona positioning anchor from the breathing transform; orb and flare now share one canvas-coordinate point. No shader, jelly physics, pointer-to-parameter mapping or DSP code changed.
+- Flare growth pivots at its stems instead of scaling the stems outward from the orb. Long flares shorten gently near the rim, with square SVG layers and visible overflow rather than hard clipping. Existing purple corona artwork, rim and reflections are retained.
+- Removed explicit green focus styles from pointer interactions. Keyboard navigation retains subtle purple outlines/glow on controls and the field; the green engine status and intended active badges remain unchanged.
+- Browser regression tests measure the anchor and corona-rim centres within 0.1 CSS pixel of the canvas orb, attached flare roots, motion/paused states, cardinal/diagonal boundaries, unchanged XY dragging and keyboard/pointer focus at three UI sizes and multiple display densities. Windows FL Studio compositor behavior still needs the user check.
+
 # Development update: clean quantizer reconstruction and ROT DNA mini-editor
 
 - Added input anti-alias filtering, fractional clock capture and output reconstruction to rate reduction. About 29dB lower clock-image ratio in the controlled 4bit/1.6kHz test. Quantization remains active; very low bit depths intentionally stay coarse.
