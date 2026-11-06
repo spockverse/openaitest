@@ -10,7 +10,7 @@ public:
     ~WubrotProcessor() override;
     void prepareToPlay(double, int) override;
     void releaseResources() override {}
-    void reset() override { dsp.reset(); expectedSample = -1; }
+    void reset() override { dsp.reset(); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
     bool isBusesLayoutSupported(const BusesLayout&) const override;
     using AudioProcessor::processBlock;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -33,9 +33,11 @@ public:
     void loadSampleBytes(juce::MemoryBlock, juce::String);
     void loadSampleFile(const juce::File&);
     void clearSample();
+    void reportSampleError(const juce::String& message) { setStatus(message); }
     void serviceRegionEdit();
     bool isLoading() const noexcept { return loading.load(); }
     juce::var uiState();
+    double modulationPosition() const noexcept { return patternPosition.load(); }
     std::atomic<int> editorSize { 1 };
     bool loadFactoryPreset(int);
     juce::AudioProcessorValueTreeState parameters;
@@ -62,6 +64,7 @@ private:
     std::atomic<std::uint64_t> generation { 0 };
     std::atomic<int> presetRequest { 0 }, currentPreset { 0 };
     std::atomic<double> runningRate { 44100 };
-    juce::int64 expectedSample = -1;
+    bool lastTransportPlaying=false;
+    juce::int64 lastReportedSample=-1, expectedSample = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WubrotProcessor)
 };

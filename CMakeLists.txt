@@ -41,7 +41,7 @@ juce_add_plugin(WUBROT
     NEEDS_WEBVIEW2 ${WUBROT_WEB_UI})
 target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
 target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}>
-    JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+    JUCE_USE_MP3AUDIOFORMAT=1 JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 if(WIN32 AND WUBROT_WEB_UI)
     target_compile_definitions(WUBROT PUBLIC JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1)
 endif()
@@ -54,7 +54,7 @@ target_link_libraries(WUBROT PRIVATE juce::juce_audio_utils PUBLIC juce::juce_re
 add_executable(WubrotIntegrationTests)
 target_sources(WubrotIntegrationTests PRIVATE tests/ProcessorTests.cpp)
 target_include_directories(WubrotIntegrationTests PRIVATE Source ${juce_SOURCE_DIR}/modules)
-target_compile_definitions(WubrotIntegrationTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+target_compile_definitions(WubrotIntegrationTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 WUBROT_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(WubrotIntegrationTests PRIVATE WUBROT)
 add_test(NAME WubrotProcessor COMMAND WubrotIntegrationTests)
 set_tests_properties(WubrotProcessor PROPERTIES ENVIRONMENT "WUBROT_CONTENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Resources")

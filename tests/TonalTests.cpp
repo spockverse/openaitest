@@ -70,6 +70,20 @@ void checkReconstruction(const char* outputDirectory)
     const float* channels[]{input.data()};auto profile=DnaProfile::analyse(channels,1,input.size(),sr);
     require(render(input,0,1,&profile,3.82f,1602)==render(input,0,0,nullptr,3.82f,1602),"DNA still modulates the bare crusher at DRIVE0");
 }
+void checkClockGating()
+{
+    DnaProfile profile;profile.valid=true;profile.duration=.5;profile.envelope.fill(.6f);
+    CrushDSP effect;effect.prepare(sr);CrushDSP::Parameters p;p.mutate=1;
+    for(int i=0;i<1000;++i){float f[]{.2f};effect.processFrame(f,1,p,&profile);}
+    const auto before=effect.getPatternPosition();p.patternEnabled=false;
+    for(int i=0;i<5000;++i){float f[]{.2f};effect.processFrame(f,1,p,&profile);}
+    require(effect.getPatternPosition()==before,"stopped host advances profile clock");
+    p.patternEnabled=true;p.inputActive=false;
+    for(int i=0;i<5000;++i){float f[]{0};effect.processFrame(f,1,p,&profile);}
+    require(effect.getPatternPosition()==before,"silent input advances profile clock");
+    p.inputActive=true;float f[]{.2f};effect.processFrame(f,1,p,&profile);effect.processFrame(f,1,p,&profile);require(effect.getPatternPosition()>before,"profile failed to resume");
+    effect.seekPattern(.25,1);effect.processFrame(f,1,p,&profile);require(std::abs(effect.getPatternPosition()-.5)<.001,"seek does not set real profile position");
+}
 void checkPatternSpeed()
 {
     DnaProfile profile;profile.valid=true;profile.duration=.5;profile.envelope.fill(.7f);
@@ -80,14 +94,14 @@ void checkPatternSpeed()
         require(std::abs(dsp.getPatternPosition()-(2399.0/sr)*speed/.5)<.002,"LOOP speed progression is wrong");
         dsp.reset();p.mode=1;dsp.noteOn();
         for(int i=0;i<7200;++i){float f[]{.2f};dsp.processFrame(f,1,p,&profile);}
-        if(speed==4)require(dsp.getPatternPosition()==0,"RETRIGGER did not stop at selected region end");
+        if(speed==4)require(dsp.getPatternPosition()==1,"RETRIGGER did not stop at selected region end");
         dsp.noteOn();float f[]{.2f};dsp.processFrame(f,1,p,&profile);require(dsp.getPatternPosition()<.001,"MIDI retrigger did not restart region");
     }
 }
 int main(int argc,char**argv)
 {
     checkReconstruction(argc>1?argv[1]:nullptr);
-    checkPatternSpeed();
+    checkPatternSpeed();checkClockGating();
     std::vector<float> sine(count),saw(count),stab(count),low(count),metal(count),vocal(count),percussion(count),tonal(count);
     unsigned seed=1234567;float filtered=0;
     for(int i=0;i<count;++i)

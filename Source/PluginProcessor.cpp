@@ -35,7 +35,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
     p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID {"dnaSpeed",1},"DNA Speed",juce::StringArray{"0.25x","0.5x","1x","2x","4x"},2));
     return p;
 }
-void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); expectedSample = -1; }
+void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
 bool WubrotProcessor::isBusesLayoutSupported(const BusesLayout& b) const
 {
     const auto out = b.getMainOutputChannelSet();
@@ -52,14 +52,19 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     p.mutate = values[2]->load() * .01f; p.drive = values[3]->load(); p.mode = static_cast<int>(values[4]->load());
     p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load(); p.enabled = values[8]->load() >= .5f;
     constexpr float speeds[]{.25f,.5f,1,2,4};p.speed=speeds[juce::jlimit(0,4,static_cast<int>(values[11]->load()))];
-    if (auto* hostClock = getPlayHead())
-        if (const auto position = hostClock->getPosition(); position && position->getIsPlaying())
-            if (const auto samples = position->getTimeInSamples())
-            {
-                if (expectedSample >= 0 && std::abs(*samples - expectedSample) > 2) dsp.resetModulation();
-                dsp.setTimeline(static_cast<double>(*samples) / runningRate);
-                expectedSample = *samples + buffer.getNumSamples();
-            }
+    bool transportKnown=false,playing=true;
+    if(auto* hostClock=getPlayHead())if(const auto position=hostClock->getPosition())
+    {
+        transportKnown=true;playing=position->getIsPlaying();
+        auto samples=position->getTimeInSamples();if(!samples)if(const auto seconds=position->getTimeInSeconds())samples=std::llround(*seconds*runningRate.load());
+        if(playing&&samples)
+        {
+            if(expectedSample>=0&&std::abs(*samples-expectedSample)>2&&(*samples!=lastReportedSample||!lastTransportPlaying)){dsp.resetModulation();dsp.seekPattern(static_cast<double>(*samples)/runningRate,p.speed);}
+            lastReportedSample=*samples;expectedSample=*samples+buffer.getNumSamples();
+        }
+    }
+    p.inputActive=buffer.getNumSamples()>0&&buffer.getMagnitude(0,buffer.getNumSamples())>1.0e-5f;
+    p.patternEnabled=!transportKnown||playing;lastTransportPlaying=playing;
     auto profile = profiles.read();
     auto event = midi.cbegin();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
@@ -90,18 +95,19 @@ void WubrotProcessor::parameterGesture(const juce::String& id, bool start)
 void WubrotProcessor::setStatus(const juce::String& message) { const juce::ScopedLock lock(metadataLock); status = message; }
 void WubrotProcessor::loadSampleFile(const juce::File& file)
 {
+    if(!file.existsAsFile()||!file.hasReadAccess()){setStatus("Cannot access this file. Use the upload icon to browse to a readable local WAV or MP3.");return;}
     if (loading.exchange(true)) { setStatus("A sample is loading. Please wait, then try again."); return; }
     presetRequest.store(-1);
     const auto token = generation.fetch_add(1) + 1;
     sampleJobs.addJob([this, file, token] {
-        if (file.getSize() > static_cast<juce::int64>(maxSampleBytes)) setStatus("WAV must be 20 MB or smaller.");
+        if (file.getSize() > static_cast<juce::int64>(maxSampleBytes)) setStatus("Audio file must be 20 MB or smaller.");
         else decodeSample(file.createInputStream(), file.getFileName(), token);
         loading.store(false);
     });
 }
 void WubrotProcessor::loadSampleBytes(juce::MemoryBlock bytes, juce::String name)
 {
-    if (bytes.getSize() > maxSampleBytes) { setStatus("WAV must be 20 MB or smaller."); return; }
+    if (bytes.getSize() > maxSampleBytes) { setStatus("Audio file must be 20 MB or smaller."); return; }
     if (loading.exchange(true)) { setStatus("A sample is loading. Please wait, then try again."); return; }
     presetRequest.store(-1);
     const auto token = generation.fetch_add(1) + 1;
@@ -112,17 +118,18 @@ void WubrotProcessor::loadSampleBytes(juce::MemoryBlock bytes, juce::String name
 void WubrotProcessor::decodeSample(std::unique_ptr<juce::InputStream> stream, const juce::String& name, std::uint64_t token, bool restoreOnly)
 {
     if (token != generation.load()) return;
+    if(!stream){setStatus("Cannot open this audio file. Check file access or use the upload icon.");return;}
     setStatus("Analysing spectral shape, harmonics and dynamics...");
     auto prepared=std::make_shared<SampleSource>();
     if(stream)stream->readIntoMemoryBlock(prepared->wav,static_cast<int>(maxSampleBytes+1));
-    if(prepared->wav.getSize()>maxSampleBytes){setStatus("WAV must be 20 MB or smaller.");return;}
-    juce::WavAudioFormat format;
-    std::unique_ptr<juce::AudioFormatReader> reader(format.createReaderFor(new juce::MemoryInputStream(prepared->wav,false),true));
+    if(prepared->wav.getSize()>maxSampleBytes){setStatus("Audio file must be 20 MB or smaller.");return;}
+    juce::AudioFormatManager formats;formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(std::make_unique<juce::MemoryInputStream>(prepared->wav,false)));
     if (!reader || reader->sampleRate < 8000 || reader->sampleRate > 384000 || reader->numChannels > 8 || reader->lengthInSamples < 1)
-    { setStatus("Cannot decode this WAV. Previous DNA is unchanged."); return; }
+    { setStatus(name.endsWithIgnoreCase(".wav")||name.endsWithIgnoreCase(".mp3")?"Decoding failed. Choose a valid PCM/float WAV or MP3. Previous DNA is unchanged.":"Unsupported audio format. Choose WAV or MP3. Previous DNA is unchanged."); return; }
     const int frames = static_cast<int>(std::min(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 30)));
     juce::AudioBuffer<float> audio(static_cast<int>(reader->numChannels), frames);
-    if (!reader->read(audio.getArrayOfWritePointers(), audio.getNumChannels(), 0, frames)) { setStatus("WAV read failed. Previous DNA is unchanged."); return; }
+    if (!reader->read(audio.getArrayOfWritePointers(), audio.getNumChannels(), 0, frames)) { setStatus("Audio decoding/read failed. Previous DNA is unchanged."); return; }
     const auto profile = DnaProfile::analyse(audio.getArrayOfReadPointers(), audio.getNumChannels(), static_cast<std::size_t>(frames), reader->sampleRate);
     if (!profile.valid) { setStatus("This WAV is silent. Previous DNA is unchanged."); return; }
     prepared->audio=std::move(audio);prepared->rate=reader->sampleRate;prepared->full=profile;

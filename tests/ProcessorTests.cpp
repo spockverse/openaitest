@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include "EditorGeometry.h"
 #include <cmath>
 #include <cstring>
@@ -87,11 +88,44 @@ static void checkRegionEditor()
     require(static_cast<bool>(restored.uiState()["editable"]),"project did not retain editable source");require(render(restored)==recalled,"region/speed recall changed audio");
     restored.setParameterValue("regionStart",.55f);restored.setParameterValue("regionEnd",1);restored.serviceRegionEdit();waitForSample(restored);require(render(restored)!=recalled,"region edit after reopen needs external WAV");
 }
+static void checkHostClock()
+{
+    struct Clock:juce::AudioPlayHead { bool playing=false;juce::int64 samples=0;juce::Optional<PositionInfo> getPosition()const override{PositionInfo p;p.setIsPlaying(playing);p.setTimeInSamples(samples);return p;} } clock;
+    WubrotProcessor p;p.loadSampleBytes(wav(),"clock.wav");waitForSample(p);p.prepareToPlay(48000,128);p.setPlayHead(&clock);
+    auto block=[&](bool audio){juce::AudioBuffer<float> buffer(2,128);buffer.clear();if(audio)for(int ch=0;ch<2;++ch)for(int i=0;i<128;++i)buffer.setSample(ch,i,.2f);juce::MidiBuffer midi;p.processBlock(buffer,midi);if(clock.playing)clock.samples+=128;return static_cast<double>(p.uiState()["playhead"]);};
+    for(int i=0;i<10;++i)require(std::abs(block(true))<1e-15,"stopped DAW moved playhead");
+    clock.playing=true;for(int i=0;i<10;++i)block(true);const auto moving=block(true);require(moving>0,"playing DAW did not move playhead");
+    clock.playing=false;for(int i=0;i<10;++i)require(std::abs(block(true)-moving)<1e-15,"DAW stop did not freeze actual profile position");
+    clock.playing=true;for(int i=0;i<10;++i)require(std::abs(block(false)-moving)<1e-15,"DAW silence did not freeze profile");
+    require(block(true)>moving,"profile did not resume with input");clock.samples=48000;require(block(true)<.02,"seek did not relocate profile");
+    const auto first=block(true);const auto stale=clock.samples;
+    for(int i=0;i<10;++i){clock.samples=stale;block(true);}require(block(true)>first,"stale host timestamps repeatedly reset profile");
+    p.setPlayHead(nullptr);
+}
+static void checkLoadingRoutes()
+{
+    WubrotProcessor p;
+    for(int bits:{16,24,32})for(double rate:{44100.,48000.,88200.,96000.,192000.})
+    {
+        juce::AudioBuffer<float> signal(1,2048);for(int i=0;i<2048;++i)signal.setSample(0,i,.3f*std::sin(i*.1f));
+        juce::MemoryBlock bytes;juce::WavAudioFormat format;
+        {std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(new juce::MemoryOutputStream(bytes,false),rate,1,bits,{},0));require(writer&&writer->writeFromAudioSampleBuffer(signal,0,2048),"WAV encoding failed");}
+        p.loadSampleBytes(bytes,"format-test.wav");waitForSample(p);const auto fromBytes=render(p);
+        const auto file=juce::File::createTempFile(bits==24&&rate==48000?".tmp":".wav");require(file.replaceWithData(bytes.getData(),bytes.getSize()),"file fixture failed");
+        std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditorIfNeeded());auto* target=dynamic_cast<juce::FileDragAndDropTarget*>(editor.get());require(target!=nullptr,"native file-drop target missing");
+        target->filesDropped(juce::StringArray{file.getFullPathName()},0,0);waitForSample(p);require(render(p)==fromBytes,"same WAV differs between native path and byte upload");file.deleteFile();
+    }
+    const juce::File mp3(juce::String(WUBROT_TEST_SOURCE_DIR)+"/tests/fixtures/synthetic-tone.mp3");p.loadSampleFile(mp3);waitForSample(p);require(p.uiState()["name"].toString()==mp3.getFileName(),"MP3 decode failed");
+    juce::MemoryBlock mp3State;p.getStateInformation(mp3State);WubrotProcessor restored;restored.setStateInformation(mp3State.getData(),static_cast<int>(mp3State.getSize()));waitForSample(restored);require(static_cast<bool>(restored.uiState()["editable"]),"MP3 source did not reopen for editing");require(render(restored)==render(p),"MP3 profile state recall changed audio");
+    p.loadSampleFile(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("missing-wubrot.wav"));require(p.uiState()["status"].toString().containsIgnoreCase("access"),"missing path has no diagnostic");
+}
 int main()
 {
     juce::ScopedJuceInitialiser_GUI initialise;
     try
     {
+        checkHostClock();
+        checkLoadingRoutes();
         checkDnaRouting();
         checkRegionEditor();
         WubrotProcessor p;

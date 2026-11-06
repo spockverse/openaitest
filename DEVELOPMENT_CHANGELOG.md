@@ -1,3 +1,10 @@
+# Compatibility update: audio drops, native browse and synchronized profile cursor
+
+- Added JUCE native file-drop targets, browser payload variants/local-path forwarding, a native WAV/MP3 picker behind the upload button, header-based decoding and explicit errors. MP3 decoding and project-source reopening supported.
+- Profile clock now pauses with stopped host transport and silent input; handles seeks/loops and stale timestamps. RETRIGGER keeps attack/MIDI behavior and holds END after completion. The UI follows lightweight real DSP positions without autonomous interpolation.
+- Distortion formulas, sound-design stages, presets, IDs, UI layout and branding remain unchanged. Only the requested modulation-clock behavior changes. See LOADING_TRANSPORT.md for validation and native Windows delivery limitations.
+- Added native callback-versus-byte loading tests, PCM16/24/float32 format/rate coverage, synthetic MP3 decoding/recall, processor transport tests and browser loader tests. No public release.
+
 # Visual-only update: attached orb corona and keyboard focus
 
 - Separated the stable corona positioning anchor from the breathing transform; orb and flare now share one canvas-coordinate point. No shader, jelly physics, pointer-to-parameter mapping or DSP code changed.

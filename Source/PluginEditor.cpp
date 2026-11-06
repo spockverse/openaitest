@@ -23,9 +23,9 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
     const auto options = makeOptions();
     if (juce::WebBrowserComponent::areOptionsSupported(options))
     {
-        browser = std::make_unique<Browser>(options); addAndMakeVisible(*browser);
+        browser = std::make_unique<Browser>(options,processor); addAndMakeVisible(*browser);
         browser->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
-        startTimerHz(20);
+        startTimerHz(60);
     }
     else
     {
@@ -64,22 +64,39 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if (type == "gesture") processor.parameterGesture(event["id"].toString(), static_cast<bool>(event["start"]));
     else if (type == "preset") processor.setCurrentProgram(static_cast<int>(event["index"]));
+    else if(type=="browse")
+    {
+        if(chooser)return;
+        chooser=std::make_unique<juce::FileChooser>("Load ROT DNA audio",juce::File(),"*.wav;*.mp3");
+        auto safe=juce::Component::SafePointer<WubrotEditor>(this);
+        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[safe](const juce::FileChooser& dialog){if(safe){const auto file=dialog.getResult();if(file!=juce::File())safe->processor.loadSampleFile(file);juce::MessageManager::callAsync([safe]{if(safe)safe->chooser.reset();});}});
+    }
+    else if(type=="filePath")
+    {
+        const auto path=event["path"].toString();const auto file=path.startsWithIgnoreCase("file://")?juce::URL(path).getLocalFile():juce::File(juce::File::isAbsolutePath(path)?path:juce::String());
+        processor.loadSampleFile(file);
+    }
+    else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") lastState.clear();
+    else if (type == "ready") { lastState.clear();lastPlayhead=-1; }
     else if (type == "sample")
     {
         const auto encoded = event["base64"].toString();
-        if (encoded.length() > 28 * 1024 * 1024) return;
+        if (encoded.length() > 28 * 1024 * 1024) {processor.reportSampleError("Audio transfer too large. Choose a file under 20 MB.");return;}
         juce::MemoryBlock bytes;
         juce::MemoryOutputStream stream(bytes, false);
         if (juce::Base64::convertFromBase64(stream, encoded))
             processor.loadSampleBytes(std::move(bytes), event["name"].toString().substring(0, 256));
+        else processor.reportSampleError("Audio transfer failed. Use the upload icon to select the file.");
     }
 }
 void WubrotEditor::timerCallback()
 {
     if (!browser || !isShowing()) return;
     applyEditorSize();
+    const double position=processor.modulationPosition();
+    if(std::abs(position-lastPlayhead)>1e-12){auto data=std::make_unique<juce::DynamicObject>();data->setProperty("position",position);browser->emitEventIfBrowserIsVisible("wubrotPlayhead",juce::var(data.release()));lastPlayhead=position;}
+    if(++uiTicks%3!=0)return;
     auto state = processor.uiState(); const auto json = juce::JSON::toString(state, true);
     if (lastState != json) { lastState = json; browser->emitEventIfBrowserIsVisible("wubrotState", state); }
 }
@@ -91,7 +108,7 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
     presets.setSelectedId(1, juce::dontSendNotification);
     presets.onChange = [this] { processor.setCurrentProgram(presets.getSelectedId() - 1); };
     load.onClick = [this] {
-        chooser = std::make_unique<juce::FileChooser>("Load ROT DNA WAV", juce::File(), "*.wav");
+        chooser = std::make_unique<juce::FileChooser>("Load ROT DNA audio", juce::File(), "*.wav;*.mp3");
         auto safe = juce::Component::SafePointer<WubrotEditor>(this);
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
             [safe](const juce::FileChooser& fc) { if (safe && fc.getResult().existsAsFile()) safe->processor.loadSampleFile(fc.getResult()); });

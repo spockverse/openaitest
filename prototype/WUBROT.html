@@ -48,8 +48,8 @@ body{padding:12px;background:#08080c}.shell{max-width:1440px;padding:35px 32px 2
   </section>
   <div class="right">
    <section class="panel dna"><div class="row"><h2 class="title">ROT DNA</h2><span class="tag">SAMPLE MORPH</span></div><div class="helix" aria-hidden="true"></div>
-    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Load a WAV sample for visual analysis"><div class="filename" id="filename">WAV LOADER: DROP YOUR SAMPLE ↥</div><div class="wave-editor" id="waveEditor"><div id="regionSelection"></div><canvas class="wave" id="wave" width="600" height="130" aria-hidden="true"></canvas><div id="regionPlayhead" aria-hidden="true"></div><button id="regionStart" class="region-handle start" role="slider" aria-label="DNA region start" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span>START</span></button><button id="regionEnd" class="region-handle end" role="slider" aria-label="DNA region end" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span>END</span></button></div><div class="region-toolbar" id="regionToolbar"><div><button id="regionLeft" aria-label="Move region left">◀</button><button id="regionRight" aria-label="Move region right">▶</button></div><div class="speed-control"><button id="speedDown" class="speed-step" aria-label="Slower DNA modulation"></button><label>SPEED <select id="dnaSpeed" aria-label="DNA modulation speed"><option>0.25×</option><option>0.5×</option><option selected>1×</option><option>2×</option><option>4×</option></select></label><button id="speedUp" class="speed-step" aria-label="Faster DNA modulation"></button></div><button id="regionLoop" aria-pressed="true" title="Switch modulation between loop and retrigger">LOOP <i></i></button></div></div>
-    <input type="file" id="file" accept=".wav,audio/wav,audio/x-wav" hidden>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Load a WAV sample for visual analysis"><button id="sampleBrowse" type="button" aria-label="Browse for an audio sample" title="Browse WAV or MP3">↥</button><div class="filename" id="filename">WAV LOADER: DROP YOUR SAMPLE</div><div class="wave-editor" id="waveEditor"><div id="regionSelection"></div><canvas class="wave" id="wave" width="600" height="130" aria-hidden="true"></canvas><div id="regionPlayhead" aria-hidden="true"></div><button id="regionStart" class="region-handle start" role="slider" aria-label="DNA region start" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span>START</span></button><button id="regionEnd" class="region-handle end" role="slider" aria-label="DNA region end" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span>END</span></button></div><div class="region-toolbar" id="regionToolbar"><div><button id="regionLeft" aria-label="Move region left">◀</button><button id="regionRight" aria-label="Move region right">▶</button></div><div class="speed-control"><button id="speedDown" class="speed-step" aria-label="Slower DNA modulation"></button><label>SPEED <select id="dnaSpeed" aria-label="DNA modulation speed"><option>0.25×</option><option>0.5×</option><option selected>1×</option><option>2×</option><option>4×</option></select></label><button id="speedUp" class="speed-step" aria-label="Faster DNA modulation"></button></div><button id="regionLoop" aria-pressed="true" title="Switch modulation between loop and retrigger">LOOP <i></i></button></div></div>
+    <input type="file" id="file" accept=".wav,.mp3,audio/wav,audio/x-wav,audio/mpeg" hidden>
     <div class="sample-footer"><p class="sample-status" id="sampleStatus" role="status">No sample loaded · waveform illustration</p><div class="dna-mode" role="group" aria-label="ROT DNA playback mode"><button id="dnaLoop" type="button" aria-pressed="true" title="Continuously loop the sample envelope">LOOP</button><button id="dnaRetrigger" type="button" aria-pressed="false" title="Restart the sample envelope on bass transients or MIDI note-ons">RETRIGGER</button></div></div>
     <div class="dna-bottom"><label>DNA INFLUENCE <span id="influenceValue">65%</span><input id="influence" type="range" min="0" max="100" value="65" aria-label="Sample visual influence"></label><button id="clear" class="clear">CLEAR DNA</button></div>
    </section>
@@ -236,7 +236,7 @@ class GelRenderer {
 .keyboard-nav button:focus-visible,.keyboard-nav input:focus-visible,.keyboard-nav select:focus-visible,.keyboard-nav [tabindex]:focus-visible{outline:1px solid #be7ee788;outline-offset:3px}
 .keyboard-nav #field:focus-visible{outline:none}
 button:focus:not(:focus-visible),input:focus:not(:focus-visible),select:focus:not(:focus-visible),canvas:focus:not(:focus-visible){outline:none}
-</style><script>
+</style><style>#sampleBrowse{position:absolute;right:12px;top:10px;width:25px;height:25px;padding:2px;background:transparent;border:0;color:#dcb8ee;font-size:23px;z-index:5}.drop .filename{padding-right:28px}</style><script>
 document.addEventListener('pointerdown',()=>document.body.classList.remove('keyboard-nav'),true);
 document.addEventListener('keydown',e=>{if(['Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))document.body.classList.add('keyboard-nav');},true);
 
@@ -411,7 +411,8 @@ for(const id of ['mutate','drive']){
  $(id).addEventListener('keyup',()=>endNativeTouch(id));
 }
 $('preset').onchange=()=>{if(nativeBackend){nativeEvent('preset',{index:$('preset').selectedIndex});return;}const v=$('preset').value;$('mutate').value=v==='glass'?25:v==='metal'?92:67;$('drive').value=v==='glass'?4:v==='metal'?22:8.5;setXY(v==='metal'?-.55:v==='glass'?.35:0,v==='metal'?-.45:v==='glass'?.2:0);controls();};
-let regionLo=0,regionHi=1,regionTouch=null,regionEditable=false,lastRegionHead=0;
+let regionLo=0,regionHi=1,regionTouch=null,regionEditable=false;
+function updateRegionPosition(position){if(!Number.isFinite(position))return;const line=$('regionPlayhead');line.style.display=regionEditable?'block':'none';line.style.transition='none';line.style.left=((regionLo+(regionHi-regionLo)*position)*100)+'%';}
 function paintRegion(){const selection=$('regionSelection');selection.style.left=(regionLo*100)+'%';selection.style.width=((regionHi-regionLo)*100)+'%';$('wave').style.maskImage=`linear-gradient(90deg,#0005 ${regionLo*100}%,#000 ${regionLo*100}%,#000 ${regionHi*100}%,#0005 ${regionHi*100}%)`;for(const [id,v]of [['regionStart',regionLo],['regionEnd',regionHi]]){$(id).style.left=(v*100)+'%';$(id).classList.toggle('edge',id==='regionStart'?v<.15:v>.85);$(id).setAttribute('aria-valuenow',String(Math.round(v*100)));$(id).title=Math.round(v*100)+'%';$(id).disabled=!regionEditable;}for(const id of ['regionLeft','regionRight'])$(id).disabled=!regionEditable;}
 function sendRegion(id,v){if(id==='regionStart')regionLo=clamp(v,0,regionHi-.01);else regionHi=clamp(v,regionLo+.01,1);nativeEvent('parameter',{id,value:id==='regionStart'?regionLo:regionHi});paintRegion();}
 for(const id of ['regionStart','regionEnd']){const button=$(id);button.onpointerdown=e=>{e.preventDefault();e.stopPropagation();regionTouch=id;button.setPointerCapture(e.pointerId);nativeEvent('gesture',{id,start:true});};button.onpointermove=e=>{if(regionTouch!==id)return;e.stopPropagation();const r=$('waveEditor').getBoundingClientRect();sendRegion(id,(e.clientX-r.left)/r.width);};const finish=e=>{if(regionTouch!==id)return;e.stopPropagation();regionTouch=null;nativeEvent('gesture',{id,start:false});};button.onpointerup=finish;button.onpointercancel=finish;button.onlostpointercapture=finish;button.onkeydown=e=>{let v=id==='regionStart'?regionLo:regionHi;const step=e.shiftKey?.1:.01;if(e.key==='ArrowLeft')v-=step;else if(e.key==='ArrowRight')v+=step;else if(e.key==='Home')v=0;else if(e.key==='End')v=1;else return;e.preventDefault();e.stopPropagation();nativeEvent('gesture',{id,start:true});sendRegion(id,v);nativeEvent('gesture',{id,start:false});};}
@@ -427,7 +428,7 @@ $('enginePower').onclick=()=>{const on=$('enginePower').getAttribute('aria-press
 async function loadSample(file){
  const version=++loadVersion;const drop=$('drop');drop.classList.remove('over');
  if(!file)return;
- if(!/\.wav$/i.test(file.name)||file.size>20*1024*1024){$('sampleStatus').textContent='Choose a WAV file smaller than 20 MB. Your previous DNA is unchanged.';drop.classList.remove('loading');drop.removeAttribute('aria-busy');return;}
+ if((!nativeBackend&&!/\.(wav|mp3)$/i.test(file.name))||file.size>20*1024*1024){$('sampleStatus').textContent='Choose a WAV or MP3 file smaller than 20 MB. Your previous DNA is unchanged.';drop.classList.remove('loading');drop.removeAttribute('aria-busy');return;}
  drop.classList.add('loading');drop.setAttribute('aria-busy','true');$('sampleStatus').textContent='Reading waveform DNA…';let ac;
  try{
   const sampleBytes=await file.arrayBuffer();
@@ -449,23 +450,30 @@ if(nativeBackend){
   $('filename').textContent=file.name.toUpperCase();$('texture').textContent='DNA / '+(sharpness>.55?'ANGULAR RIPPLES':'FLOWING RIPPLES');
   $('sampleStatus').textContent=peak===0?'Silent sample: a calm field. Load another WAV for more texture.':`DNA loaded · ${Math.min(buffer.duration,30).toFixed(1)}s analysed · ${sharpness>.55?'edged, metallic ripple bias':'soft, flowing ripple bias'}.`;
   drawWave();schedule();
- }catch(error){if(version===loadVersion)$('sampleStatus').textContent='This WAV could not be decoded. Try a standard PCM WAV. Previous DNA is unchanged.';}
+ }catch(error){if(version===loadVersion)$('sampleStatus').textContent='Audio decoding failed. Try a standard PCM/float WAV or MP3. Previous DNA is unchanged.';}
  finally{if(ac)await ac.close().catch(()=>{});if(version===loadVersion){drop.classList.remove('loading');drop.removeAttribute('aria-busy');}}
 }
-$('drop').onclick=()=>$('file').click();$('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click();}};
+function browseSample(){if(nativeBackend)nativeEvent('browse');else $('file').click();}
+$('sampleBrowse').onclick=e=>{e.stopPropagation();browseSample();};$('drop').onclick=browseSample;$('drop').onkeydown=e=>{if(e.target!==$('drop'))return;if(e.key==='Enter'||e.key===' '){e.preventDefault();browseSample();}};
 $('file').onchange=()=>{loadSample($('file').files[0]);$('file').value='';};
 for(const name of ['dragenter','dragover'])$('drop').addEventListener(name,e=>{e.preventDefault();$('drop').classList.add('over');});
-$('drop').ondragleave=()=>$('drop').classList.remove('over');$('drop').ondrop=e=>{e.preventDefault();loadSample(e.dataTransfer.files[0]);};
+$('drop').ondragleave=()=>$('drop').classList.remove('over');$('drop').ondrop=async e=>{e.preventDefault();e.stopPropagation();$('drop').classList.remove('over');const data=e.dataTransfer;let file=data.files&&data.files[0];
+ if(!file&&data.items)for(const item of data.items){if(item.kind==='file'){file=item.getAsFile();if(file)break;const entry=item.webkitGetAsEntry?.();if(entry?.isFile){file=await new Promise(resolve=>entry.file(resolve,()=>resolve(null)));if(file)break;}}}
+ if(file){loadSample(file);return;}
+ const uri=(data.getData('text/uri-list')||data.getData('text/plain')||'').split(/[\r\n]+/).find(s=>s&&!s.startsWith('#'));
+ if(nativeBackend&&uri&&(/^file:\/\//i.test(uri)||/^[a-z]:[\\/]/i.test(uri)||(uri.charCodeAt(0)===92&&uri.charCodeAt(1)===92))){nativeEvent('filePath',{path:uri});return;}
+ $('sampleStatus').textContent='This drag source did not provide a readable audio file. Use the upload icon to browse.';nativeEvent('dropError');};
 window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());
-$('clear').onclick=()=>{nativeEvent('clear');++loadVersion;waveform=null;sharpness=0;sampleLoaded=false;$('drop').classList.remove('loading','over');$('drop').removeAttribute('aria-busy');$('filename').textContent='WAV LOADER: DROP YOUR SAMPLE ↥';$('sampleStatus').textContent='DNA cleared. Neutral liquid field restored.';$('texture').textContent='48 kHz / STEREO · UI STUDY';drawWave();schedule();};
+$('clear').onclick=()=>{nativeEvent('clear');++loadVersion;waveform=null;sharpness=0;sampleLoaded=false;$('drop').classList.remove('loading','over');$('drop').removeAttribute('aria-busy');$('filename').textContent='WAV LOADER: DROP YOUR SAMPLE';$('sampleStatus').textContent='DNA cleared. Neutral liquid field restored.';$('texture').textContent='48 kHz / STEREO · UI STUDY';drawWave();schedule();};
 if(nativeBackend){
- $('filename').textContent='WAV LOADER: DROP YOUR SAMPLE ↥';setEnginePower(true);
+ $('filename').textContent='WAV LOADER: DROP YOUR SAMPLE';setEnginePower(true);
  const notice=document.querySelector('.notice');notice.style.display='none';
  // Fit the existing artwork to a resizable plugin window, without adding panels.
  for(const sheet of document.styleSheets){try{for(let i=sheet.cssRules.length-1;i>=0;i--){const rule=sheet.cssRules[i];if(rule.media&&/width/.test(rule.conditionText))sheet.deleteRule(i);}}catch(e){}}
  const style=document.createElement('style');style.textContent='body{padding:0;overflow:hidden}.shell{position:absolute;left:0;top:0;width:1200px;height:1040px;max-width:none;transform-origin:top left}.brand{font-size:78px}.maker{font-size:24px}.filename{font-size:14px}.xybox{width:94%;margin:-7px auto -6px}.dna{flex:0 0 47%}.axis-y{left:-4px}';document.head.appendChild(style);
  const fit=()=>{const shell=document.querySelector('.shell');shell.style.width='1200px';shell.style.height='1040px';shell.style.boxSizing='border-box';shell.style.transform=`scale(${innerWidth/1200})`;};
  new ResizeObserver(fit).observe(document.querySelector('.shell'));window.addEventListener('resize',fit);fit();
+ nativeBackend.addEventListener('wubrotPlayhead',data=>updateRegionPosition(data.position));
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;
   try{
@@ -477,11 +485,11 @@ if(nativeBackend){
    if(typeof state.editable==='boolean')regionEditable=state.editable;paintRegion();
    if(Number.isInteger(state.dnaSpeed))$('dnaSpeed').selectedIndex=state.dnaSpeed;
    const loop=state.mode!==1;$('regionLoop').setAttribute('aria-pressed',String(loop));$('regionLoop').firstChild.textContent=loop?'LOOP ':'RETRIG ';
-   if(Number.isFinite(state.playhead)){$('regionPlayhead').style.display=regionEditable?'block':'none';$('regionPlayhead').style.transition=state.playhead<lastRegionHead?'none':'left 50ms linear';lastRegionHead=state.playhead;$('regionPlayhead').style.left=((regionLo+(regionHi-regionLo)*state.playhead)*100)+'%';}
+   updateRegionPosition(state.playhead);
    setDnaMode(state.mode,false);controls();$('preset').selectedIndex=state.preset;
    if(Number.isFinite(state.sampleRate)&&state.sampleRate>=8000){displaySampleRate=state.sampleRate;readouts();}
    $('sampleStatus').textContent=state.status;$('sampleStatus').title=state.status;$('drop').classList.toggle('loading',!!state.loading);$('drop').setAttribute('aria-busy',String(!!state.loading));
-   $('filename').textContent=state.name?(regionEditable?'WAV LOADER (EDITING): ':'WAV LOADER: ')+state.name:'WAV LOADER: DROP YOUR SAMPLE ↥';
+   $('filename').textContent=state.name?(regionEditable?'WAV LOADER (EDITING): ':'WAV LOADER: ')+state.name:'WAV LOADER: DROP YOUR SAMPLE';
    if(Array.isArray(state.waveform)&&state.waveform.length===128){waveform=Float32Array.from(state.waveform);sampleLoaded=true;let roughness=0;for(let i=1;i<128;i++)roughness+=Math.abs(waveform[i]-waveform[i-1]);sharpness=Math.min(1,roughness/24);}else{waveform=null;sampleLoaded=false;sharpness=0;}
    drawWave();$('texture').textContent=(state.sampleRate/1000).toFixed(1)+' kHz / STEREO';
   }finally{applyingNative=false;}

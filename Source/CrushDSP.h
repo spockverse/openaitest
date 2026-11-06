@@ -13,7 +13,7 @@ public:
     struct Parameters
     {
         float drive=12,bits=8,rate=12000,mix=.65f,output=-6,protect=1;
-        float mutate=0,speed=1;bool enabled=true;int mode=0;
+        float mutate=0,speed=1;bool enabled=true,patternEnabled=true,inputActive=true;int mode=0;
     };
     void prepare(double sr)
     {
@@ -27,11 +27,12 @@ public:
     }
     void reset()
     {
-        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;resetModulation();
+        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;activityHold=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;resetModulation();
     }
     void resetModulation()noexcept{retriggerTime=retriggerPatternTime=0;modulation=0;detector=0;refractory=0;retriggerArmed=false;}
     void setTimeline(double seconds)noexcept{seconds=std::max(0.0,seconds);if(std::abs(seconds-loopTime)>2/sampleRate)loopPatternTime=seconds*current.speed;loopTime=seconds;}
-    void noteOn()noexcept{retriggerTime=retriggerPatternTime=0;retriggerArmed=true;refractory=static_cast<int>(sampleRate*.05);}
+    void seekPattern(double seconds,float speed)noexcept{loopPatternTime=std::max(0.0,seconds)*speed;}
+    void noteOn()noexcept{patternPosition=0;retriggerTime=retriggerPatternTime=0;retriggerArmed=true;refractory=static_cast<int>(sampleRate*.05);}
     double getPatternPosition()const noexcept{return patternPosition;}
     double getRetriggerTime()const noexcept{return retriggerTime;}
     void processFrame(float* frame,int channels,const Parameters& target,const DnaProfile* dna=nullptr)noexcept
@@ -54,14 +55,17 @@ public:
             high=std::max(high,std::abs(frame[ch]-colour[static_cast<std::size_t>(ch)]));
         }
         if(refractory>0)--refractory;
-        if(current.mode==1&&refractory==0&&peak>.015f&&peak>detector*1.8f+.008f)noteOn();
+        if(target.patternEnabled&&current.mode==1&&refractory==0&&peak>.015f&&peak>detector*1.8f+.008f)noteOn();
         detector=std::max(peak,detector*detectorRelease);
         fast+=(peak>fast?attackCoefficient:releaseCoefficient)*(peak-fast);slow+=slowCoefficient*(peak-slow);
         brightness+=modulationCoefficient*(std::clamp(high/(fast+.002f),0.0f,1.0f)-brightness);
         const bool loaded=dna&&dna->valid;
         const bool running=loaded&&(current.mode==0||(retriggerArmed&&retriggerPatternTime<dna->duration));
-        const float env=running?dna->at((current.mode==0?loopPatternTime:retriggerPatternTime)):0;
-        patternPosition=running?std::fmod((current.mode==0?loopPatternTime:retriggerPatternTime)/dna->duration,1.0):0;
+        if(peak>1.0e-5f)activityHold=static_cast<int>(sampleRate*.002);else if(activityHold>0)--activityHold;
+        const bool advancing=target.patternEnabled&&target.inputActive&&activityHold>0;
+        if(loaded&&advancing)patternPosition=current.mode==1&&retriggerPatternTime>=dna->duration?1.0:std::fmod((current.mode==0?loopPatternTime:retriggerPatternTime)/dna->duration,1.0);
+        else if(!loaded)patternPosition=0;
+        const float env=running?dna->at(advancing?(current.mode==0?loopPatternTime:retriggerPatternTime):patternPosition*dna->duration):0;
         modulation+=modulationCoefficient*(env-modulation);
         dnaPresence+=modulationCoefficient*((loaded?1.0f:0.0f)-dnaPresence);
         const float influence=current.mutate*dnaPresence;
@@ -126,7 +130,7 @@ public:
             const float processed=(dry[c]+current.mix*(wet-dry[c]))*output;
             frame[ch]=bypassWet<=0?original[c]:bypassWet>=1?processed:original[c]+bypassWet*(processed-original[c]);
         }
-        loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;
+        loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
     }
 private:
     void clearAudio()noexcept{low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();}
@@ -137,7 +141,7 @@ private:
     float smoothCoefficient=.001f,modulationCoefficient=.01f,attackCoefficient=.01f,releaseCoefficient=.001f,slowCoefficient=.001f;
     float lowCoefficient=.01f,colourCoefficient=.2f,dcCoefficient=.995f,detectorRelease=.999f;
     float detector=0,modulation=0,fast=0,slow=0,brightness=0,bypassWet=1;
-    int refractory=0,silentFrames=0;bool primed=false,retriggerArmed=false;
+    int refractory=0,silentFrames=0,activityHold=0;bool primed=false,retriggerArmed=false;
     DnaSpectrum smoothedSpectrum;float dnaPresence=0;
     Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;
     std::array<float,2> low{},dcInput{},dcOutput{},colour{};
