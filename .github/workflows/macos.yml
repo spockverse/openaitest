@@ -21,10 +21,31 @@ jobs:
           python-version: '3.12'
       - name: Check preset manifests
         run: python3 tools/validate_factory.py --allow-missing
+      - name: Restore universal build intermediates
+        id: mac-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build
+          key: wubrot-macos15-universal-v1-${{ hashFiles('CMakeLists.txt') }}
       - name: Configure universal AU and VST3
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
       - name: Build plugin and tests
-        run: cmake --build build --parallel 3
+        run: |
+          set +e
+          cmake --build build --parallel 3 > build-output.log 2>&1
+          task_build_status=$?
+          set -e
+          cat build-output.log
+          if [ "$task_build_status" -ne 0 ]; then
+            python3 tools/ci_error_annotation.py build-output.log
+          fi
+          exit "$task_build_status"
+      - name: Retain valid build intermediates
+        if: ${{ always() && steps.mac-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build
+          key: wubrot-macos15-universal-v1-${{ hashFiles('CMakeLists.txt') }}
       - name: Test audio and project recall
         run: ctest --test-dir build --output-on-failure
       - name: Validate Audio Unit
