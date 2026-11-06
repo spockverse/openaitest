@@ -1,3 +1,12 @@
+# Development update: clean quantizer reconstruction and ROT DNA mini-editor
+
+- Added input anti-alias filtering, fractional clock capture and output reconstruction to rate reduction. About 29dB lower clock-image ratio in the controlled 4bit/1.6kHz test. Quantization remains active; very low bit depths intentionally stay coarse.
+- DNA no longer sweeps XY bit/rate values. Oversampled extra drive now follows reconstruction; removed a separate envelope-dependent output gain. DRIVE0 isolates the bare crusher.
+- Added mockup-style cyan region handles/highlight/playhead, compact five-speed selector with mini step encoders, and synchronized LOOP/RETRIGGER controls inside ROT DNA. Main XY/knobs/footer geometry unchanged.
+- Exact selected samples are reanalysed off the audio thread. Changes to spectral shaping are smoothed. Silent regions disable DNA. New user-loaded sources are embedded only in user project state for offline editing/recall, not plugin resources or build artifacts. Legacy states load; reload original WAV for editing. First 30s/20MB source limits remain.
+- Appended three automatable parameters without altering existing IDs/order. Region/speed, actual analysed bounds and active profile save; restores retain the editable source. Five speeds and LOOP/RETRIGGER timing, region contrast and recall, clean clock behavior and browser interaction/layout checks added.
+- Synthetic auditions generated before Windows build. Uploaded reference recordings are analysis-only and excluded from every distributed file. No public release.
+
 # Development update: input-derived tonal grit and spectral ROT DNA
 
 - Removed elapsed-time vowel sweeps and both free-running ring carriers. Live envelope, transient contrast and brightness now control coloration of the incoming waveform's own harmonics; silence and note gaps cannot play an independent yoi layer.

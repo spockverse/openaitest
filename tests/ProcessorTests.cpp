@@ -67,12 +67,33 @@ static void checkDnaRouting()
     double delta=0,energy=0;for(std::size_t i=0;i<fullA.size();++i){delta+=(fullA[i]-fullB[i])*(fullA[i]-fullB[i]);energy+=fullA[i]*fullA[i];}
     std::cout<<"Real WAV worker -> profile exchange -> DSP: MUTATE0 identical; MUTATE100 normalized waveform difference "<<std::sqrt(delta/(energy+1e-20))<<'\n';
 }
+static void checkRegionEditor()
+{
+    juce::AudioBuffer<float> audio(1,48000);
+    for(int i=0;i<48000;++i){const float t=i/48000.0f;audio.setSample(0,i,i<24000?.4f*std::sin(1256.637f*t):(.4f*std::sin(10750.0f*t)+.25f*std::sin(18428.0f*t))*(i%6000<1500?1.0f:.1f));}
+    juce::MemoryBlock bytes;juce::WavAudioFormat format;
+    {std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(new juce::MemoryOutputStream(bytes,false),48000,1,16,{},0));require(writer&&writer->writeFromAudioSampleBuffer(audio,0,48000),"region fixture failed");}
+    WubrotProcessor p;p.loadSampleBytes(bytes,"two-regions.wav");waitForSample(p);p.setParameterValue("mutate",100);p.setParameterValue("drive",20);
+    auto select=[&](float start,float end){p.setParameterValue("regionStart",start);p.setParameterValue("regionEnd",end);p.serviceRegionEdit();waitForSample(p);};
+    select(0,.45f);const auto first=render(p);juce::MemoryBlock firstState;p.getStateInformation(firstState);
+    select(.55f,1);const auto second=render(p);require(first!=second,"selected WAV region did not affect audio");
+    juce::MemoryBlock secondState;p.getStateInformation(secondState);
+    auto a=juce::AudioProcessor::getXmlFromBinary(firstState.getData(),static_cast<int>(firstState.getSize())),b=juce::AudioProcessor::getXmlFromBinary(secondState.getData(),static_cast<int>(secondState.getSize()));
+    require(a->getStringAttribute("dnaSpectrum")!=b->getStringAttribute("dnaSpectrum"),"selection did not reanalyse spectral content");
+    p.setParameterValue("dnaSpeed",4);const auto fast=render(p);p.setParameterValue("dnaSpeed",0);const auto slow=render(p);require(fast!=slow,"speed did not alter modulation");
+    p.setParameterValue("mutate",0);const auto zeroA=render(p);select(0,.45f);require(render(p)==zeroA,"region influenced MUTATE zero");
+    p.setParameterValue("mutate",100);const auto recalled=render(p);juce::MemoryBlock state;p.getStateInformation(state);
+    WubrotProcessor restored;restored.setStateInformation(state.getData(),static_cast<int>(state.getSize()));waitForSample(restored);
+    require(static_cast<bool>(restored.uiState()["editable"]),"project did not retain editable source");require(render(restored)==recalled,"region/speed recall changed audio");
+    restored.setParameterValue("regionStart",.55f);restored.setParameterValue("regionEnd",1);restored.serviceRegionEdit();waitForSample(restored);require(render(restored)!=recalled,"region edit after reopen needs external WAV");
+}
 int main()
 {
     juce::ScopedJuceInitialiser_GUI initialise;
     try
     {
         checkDnaRouting();
+        checkRegionEditor();
         WubrotProcessor p;
        #if JUCE_WINDOWS
         for (int size = 0; size < 3; ++size)

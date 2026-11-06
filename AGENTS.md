@@ -8,3 +8,5 @@
 - Report browser, processor, real-VST3 and real-DAW checks separately. Do not claim FL Studio UI validation without actually testing it.
 
 - User-provided bass recordings are temporary analysis references only. Never commit, embed, bundle, or distribute them or their processed/converted derivatives, including audition ZIPs. Distributed audio tests must be synthetic or explicitly licensed for redistribution. Keep quantitative analysis findings without recordings.
+
+- ROT DNA regionStart/regionEnd/dnaSpeed are appended automatable parameters. New user projects embed their loaded WAV for offline editing (20MB/first30s); this is project data, never factory/build content. Keep reference recordings excluded from all distributed artifacts.

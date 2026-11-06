@@ -32,8 +32,62 @@ std::vector<float> matched(std::vector<float> x,double target=.12)
     const float gain=static_cast<float>(target/std::max(1e-20,rms(x)));for(auto& v:x)v*=gain;
     return x;
 }
+void checkReconstruction(const char* outputDirectory)
+{
+    CleanCrusher clean;clean.prepare(sr);
+    std::vector<float> raw(sr),rebuilt(sr),rawAlias(sr),cleanAlias(sr);
+    double phase=1;float hold=0;
+    for(int i=0;i<sr*2;++i)
+    {
+        const float input=.4f*static_cast<float>(std::sin(tau*100*i/sr));
+        if(phase>=1){phase-=std::floor(phase);hold=std::round(input*8)/8;}
+        float f[]{input};clean.process(f,1,4,1600);phase+=1600.0/sr;
+        if(i>=sr){raw[static_cast<std::size_t>(i-sr)]=hold;rebuilt[static_cast<std::size_t>(i-sr)]=f[0];}
+    }
+    const double oldImages=(magnitude(raw,1500)+magnitude(raw,1700))/magnitude(raw,100);
+    const double newImages=(magnitude(rebuilt,1500)+magnitude(rebuilt,1700))/magnitude(rebuilt,100);
+    std::cout<<"Hold-clock image ratio raw="<<oldImages<<" rebuilt="<<newImages<<" rejection="<<20*std::log10(oldImages/newImages)<<"dB\n";
+    require(newImages<oldImages*.15,"reconstruction failed to remove clock images independently of gain");
+    if(outputDirectory)
+    {
+        const std::filesystem::path dir(outputDirectory);std::filesystem::create_directories(dir);
+        wav(dir/"clock-test-before-raw-hold-matched.wav",matched(raw));
+        wav(dir/"clock-test-after-reconstruction-matched.wav",matched(rebuilt));
+    }
+    clean.reset();phase=1;hold=0;
+    for(int i=0;i<sr*2;++i)
+    {
+        const float input=.4f*static_cast<float>(std::sin(tau*1700*i/sr));
+        if(phase>=1){phase-=std::floor(phase);hold=std::round(input*8)/8;}
+        float f[]{input};clean.process(f,1,4,1600);phase+=1600.0/sr;
+        if(i>=sr){rawAlias[static_cast<std::size_t>(i-sr)]=hold;cleanAlias[static_cast<std::size_t>(i-sr)]=f[0];}
+    }
+    require(magnitude(cleanAlias,100)<magnitude(rawAlias,100)*.15,"input anti-alias filtering failed");
+    clean.reset();float value=0;for(int i=0;i<sr;++i){float f[]{.32f};clean.process(f,1,4,1600);value=f[0];}
+    require(std::abs(value-.375f)<1e-4f,"cleanup bypassed the four-bit quantizer");
+    // With extra distortion disengaged, donor identity cannot sweep the clock.
+    std::vector<float> input(sr);for(int i=0;i<sr;++i)input[static_cast<std::size_t>(i)]=.3f*static_cast<float>(std::sin(tau*55*i/sr));
+    const float* channels[]{input.data()};auto profile=DnaProfile::analyse(channels,1,input.size(),sr);
+    require(render(input,0,1,&profile,3.82f,1602)==render(input,0,0,nullptr,3.82f,1602),"DNA still modulates the bare crusher at DRIVE0");
+}
+void checkPatternSpeed()
+{
+    DnaProfile profile;profile.valid=true;profile.duration=.5;profile.envelope.fill(.7f);
+    for(float speed:{.25f,.5f,1.0f,2.0f,4.0f})
+    {
+        CrushDSP dsp;dsp.prepare(sr);CrushDSP::Parameters p;p.speed=speed;p.mode=0;
+        for(int i=0;i<2400;++i){float f[]{.2f};dsp.processFrame(f,1,p,&profile);}
+        require(std::abs(dsp.getPatternPosition()-(2399.0/sr)*speed/.5)<.002,"LOOP speed progression is wrong");
+        dsp.reset();p.mode=1;dsp.noteOn();
+        for(int i=0;i<7200;++i){float f[]{.2f};dsp.processFrame(f,1,p,&profile);}
+        if(speed==4)require(dsp.getPatternPosition()==0,"RETRIGGER did not stop at selected region end");
+        dsp.noteOn();float f[]{.2f};dsp.processFrame(f,1,p,&profile);require(dsp.getPatternPosition()<.001,"MIDI retrigger did not restart region");
+    }
+}
 int main(int argc,char**argv)
 {
+    checkReconstruction(argc>1?argv[1]:nullptr);
+    checkPatternSpeed();
     std::vector<float> sine(count),saw(count),stab(count),low(count),metal(count),vocal(count),percussion(count),tonal(count);
     unsigned seed=1234567;float filtered=0;
     for(int i=0;i<count;++i)
@@ -67,6 +121,11 @@ int main(int argc,char**argv)
         auto out=render(*pair.second,20,0,nullptr);require(rms(out)>.01,"input disappeared");
         require(difference(out,*pair.second)>.01,"input not transformed");
         files.emplace_back(std::string(pair.first)+"-dry.wav",*pair.second);files.emplace_back(std::string(pair.first)+"-processed.wav",out);
+    }
+    for(const auto& source:sources)for(float drive:{0.0f,36.0f})
+    {
+        const auto output=render(*source.second,drive,1,&profiles[1],3.82f,1602);
+        files.emplace_back(std::string("upper-right-")+source.first+"-drive"+std::to_string(static_cast<int>(drive))+".wav",output);
     }
     const auto base=render(low,20,0,nullptr),baseMatched=matched(base);
     for(std::size_t j=0;j<profiles.size();++j)
@@ -127,6 +186,16 @@ int main(int argc,char**argv)
         for(const auto& pair:files){float peak=0;for(auto v:pair.second)peak=std::max(peak,std::abs(v));commonTarget=std::min(commonTarget,.85*rms(pair.second)/std::max(1e-20f,peak));}
         std::cout<<"Audition common RMS "<<commonTarget<<" ("<<20*std::log10(commonTarget)<<" dBFS)\n";
         for(const auto& pair:files){wav(dir/pair.first,pair.second);wav(dir/("listen-"+pair.first),matched(pair.second,commonTarget));}
+        std::vector<float> donor=vocal;std::copy(metal.begin()+count/2,metal.end(),donor.begin()+count/2);
+        const float* startChannels[]{donor.data()};const float* endChannels[]{donor.data()+count/2};
+        const auto first=DnaProfile::analyse(startChannels,1,count/2,sr),last=DnaProfile::analyse(endChannels,1,count/2,sr);
+        wav(dir/"region-source-synthetic.wav",donor);wav(dir/"region-first-half-matched.wav",matched(render(low,20,1,&first),commonTarget));wav(dir/"region-last-half-matched.wav",matched(render(low,20,1,&last),commonTarget));
+        for(float speed:{.25f,.5f,1.0f,2.0f,4.0f})
+        {
+            CrushDSP effect;effect.prepare(sr);CrushDSP::Parameters p;p.drive=20;p.mutate=1;p.mix=1;p.speed=speed;p.bits=9;p.rate=16000;
+            std::vector<float> out;for(auto v:low){float f[]{v};effect.processFrame(f,1,p,&last);out.push_back(f[0]);}
+            auto normalized=matched(out,commonTarget);wav(dir/("region-speed-"+std::to_string(speed)+"-matched.wav"),normalized);
+        }
         wav(dir/"DNA-source-metallic-synthetic.wav",metal);wav(dir/"DNA-source-vocal-like-synthetic.wav",vocal);wav(dir/"DNA-source-percussion-synthetic.wav",percussion);wav(dir/"DNA-source-tonal-synthetic.wav",tonal);
         wav(dir/"01-no-DNA-matched.wav",matched(base,commonTarget));
         for(std::size_t j=0;j<3;++j)wav(dir/(std::to_string(j+2)+"-"+std::array<std::string,3>{"metallic","vocal-like","percussive"}[j]+"-DNA100-matched.wav"),matched(render(low,20,1,&profiles[j]),commonTarget));

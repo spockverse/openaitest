@@ -59,7 +59,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     else if (type == "parameter")
     {
         const auto id = event["id"].toString();
-        if (id == "x" || id == "y" || id == "mutate" || id == "drive" || id == "mode" || id == "enabled")
+        if (id == "x" || id == "y" || id == "mutate" || id == "drive" || id == "mode" || id == "enabled" || id == "regionStart" || id == "regionEnd" || id == "dnaSpeed")
             processor.setParameterValue(id, static_cast<float>(event["value"]));
     }
     else if (type == "gesture") processor.parameterGesture(event["id"].toString(), static_cast<bool>(event["start"]));

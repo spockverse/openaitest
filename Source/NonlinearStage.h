@@ -4,7 +4,7 @@
 #include <cmath>
 
 // 4x minimum-phase interpolation / anti-imaging and anti-alias filtering.
-// Only nonlinear processing is oversampled; intentional bit/rate reduction follows.
+// Only nonlinear processing is oversampled; clean bit/rate reduction precedes it.
 class NonlinearStage
 {
     struct Lowpass

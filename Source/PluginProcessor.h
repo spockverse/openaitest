@@ -33,6 +33,7 @@ public:
     void loadSampleBytes(juce::MemoryBlock, juce::String);
     void loadSampleFile(const juce::File&);
     void clearSample();
+    void serviceRegionEdit();
     bool isLoading() const noexcept { return loading.load(); }
     juce::var uiState();
     std::atomic<int> editorSize { 1 };
@@ -41,16 +42,23 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();
     void timerCallback() override;
-    void decodeSample(std::unique_ptr<juce::InputStream>, const juce::String&, std::uint64_t);
+    void decodeSample(std::unique_ptr<juce::InputStream>, const juce::String&, std::uint64_t, bool restoreOnly = false);
     void setStatus(const juce::String&);
     juce::File factoryRoot() const;
+    struct SampleSource { juce::AudioBuffer<float> audio; juce::MemoryBlock wav; double rate=48000; DnaProfile full; };
+    static DnaProfile analyseRegion(const SampleSource&, float, float);
+    std::shared_ptr<const SampleSource> source;
+    juce::MemoryBlock storedWav;
+    std::array<float,DnaProfile::bins> fullEnvelope {};
+    float analysedStart=0,analysedEnd=1;
+    std::atomic<double> patternPosition {0};
     CrushDSP dsp;
     DnaExchange profiles;
-    std::array<std::atomic<float>*, 9> values;
+    std::array<std::atomic<float>*, 12> values;
     juce::CriticalSection metadataLock; // Never used by processBlock.
     juce::String sampleName, status { "Load a WAV into ROT DNA." };
     juce::ThreadPool sampleJobs { 1 };
-    std::atomic<bool> loading { false };
+    std::atomic<bool> loading { false }, regionJob { false };
     std::atomic<std::uint64_t> generation { 0 };
     std::atomic<int> presetRequest { 0 }, currentPreset { 0 };
     std::atomic<double> runningRate { 44100 };
