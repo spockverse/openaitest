@@ -68,6 +68,13 @@ void WubrotEditor::handleEvent(const juce::var& event)
 void WubrotEditor::timerCallback()
 {
     if (!browser || !isShowing()) return;
+    const int widths[] { 600, 800, 1000 };
+    const int preferred = widths[juce::jlimit(0, 2, processor.editorSize.load())];
+    if (getWidth() != preferred || getHeight() != preferred * 5 / 6)
+    {
+        setResizeLimits(preferred, preferred * 5 / 6, preferred, preferred * 5 / 6);
+        setSize(preferred, preferred * 5 / 6);
+    }
     auto state = processor.uiState(); const auto json = juce::JSON::toString(state, true);
     if (lastState != json) { lastState = json; browser->emitEventIfBrowserIsVisible("wubrotState", state); }
 }
