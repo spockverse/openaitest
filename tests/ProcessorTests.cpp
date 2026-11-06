@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "EditorGeometry.h"
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -57,13 +58,12 @@ int main()
        #if JUCE_WINDOWS
         for (int size = 0; size < 3; ++size)
         {
-            const int widths[] { 600, 804, 996 };
             p.editorSize.store(size);
             for (int reopen = 0; reopen < 2; ++reopen)
             {
                 std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditorIfNeeded());
                 require(editor != nullptr, "native editor creation failed");
-                require(editor->getWidth() == widths[size] && editor->getHeight() == widths[size] * 5 / 6, "native editor size/reopening mismatch");
+                require(editor->getWidth() == WubrotGeometry::width(size) && editor->getHeight() == WubrotGeometry::height(size), "native editor size/reopening mismatch");
                 require(!editor->isResizable(), "arbitrary editor resizing must be disabled");
             }
         }

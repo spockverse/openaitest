@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "EditorGeometry.h"
 #if WUBROT_WEB_UI
 #include "WubrotAssets.h"
 juce::WebBrowserComponent::Options WubrotEditor::makeOptions()
@@ -32,8 +33,17 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
         error.setJustificationType(juce::Justification::centred); addAndMakeVisible(error);
     }
     setResizable(false, false);
-    const int widths[] { 600, 804, 996 };
-    const int width = widths[processor.editorSize.load()]; setResizeLimits(width, width * 5 / 6, width, width * 5 / 6); setSize(width, width * 5 / 6);
+    applyEditorSize();
+}
+void WubrotEditor::applyEditorSize()
+{
+    const int index = processor.editorSize.load();
+    const int w = WubrotGeometry::width(index), h = WubrotGeometry::height(index);
+    if (getWidth() != w || getHeight() != h)
+    {
+        setResizeLimits(w, h, w, h);
+        setSize(w, h);
+    }
 }
 void WubrotEditor::resized() { if (browser) browser->setBounds(getLocalBounds()); error.setBounds(getLocalBounds().reduced(40)); }
 void WubrotEditor::handleEvent(const juce::var& event)
@@ -44,7 +54,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
         const int index = juce::jlimit(0, 2, static_cast<int>(event["index"]));
         processor.editorSize.store(index);
         processor.updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true));
-        const int widths[] { 600, 804, 996 }; const int w = widths[index]; setResizeLimits(w, w * 5 / 6, w, w * 5 / 6); setSize(w, w * 5 / 6);
+        applyEditorSize();
     }
     else if (type == "parameter")
     {
@@ -69,13 +79,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
 void WubrotEditor::timerCallback()
 {
     if (!browser || !isShowing()) return;
-    const int widths[] { 600, 804, 996 };
-    const int preferred = widths[juce::jlimit(0, 2, processor.editorSize.load())];
-    if (getWidth() != preferred || getHeight() != preferred * 5 / 6)
-    {
-        setResizeLimits(preferred, preferred * 5 / 6, preferred, preferred * 5 / 6);
-        setSize(preferred, preferred * 5 / 6);
-    }
+    applyEditorSize();
     auto state = processor.uiState(); const auto json = juce::JSON::toString(state, true);
     if (lastState != json) { lastState = json; browser->emitEventIfBrowserIsVisible("wubrotState", state); }
 }

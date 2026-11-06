@@ -45,7 +45,7 @@ substantial output differences. At MUTATE zero all DNA influence remains absent.
 LOOP/RETRIGGER and embedded spectral profile recall remain intact.
 
 Engine On is a new parameter appended after all existing parameters. Existing
-IDs and order remain unchanged. The footer toggle uses a sample-rate-independent
+IDs and order remain unchanged. The header power toggle uses a sample-rate-independent
 5ms linear crossfade. OFF is the exact input, independent of output gain. DSP
 continues running so toggling preserves modulation and filter history. Tests
 compare the entire transition against an always-running wet reference and the

@@ -18,6 +18,7 @@ private:
     };
     juce::WebBrowserComponent::Options makeOptions();
     void handleEvent(const juce::var&);
+    void applyEditorSize();
     void timerCallback() override;
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;

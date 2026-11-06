@@ -1,3 +1,11 @@
+# Development update: header power and complete footer containment
+
+- Moved the circular illuminated power control beside the preset selector, matching the latest reference. Reinstated the read-only footer ENGINE ACTIVE / ENGINE BYPASSED status. The existing automatable Engine On parameter and click-free DSP bypass are unchanged.
+- Fixed the underlying height mismatch: 1200x1000 could not contain the main interface, footer and lower border, especially with multiline DNA status. The web canvas is now 1200x1040, with matching logical JUCE editor dimensions: Small 600x520, Medium 804x697, Large 996x864. Main controls retain their previous width/scale; no global shrinking, scrollbars or letterboxing.
+- Centralized native dimensions in EditorGeometry.h for construction, size switching and restored bounds. Heights round up to avoid fractional clipping; JUCE/WebView2 apply Windows DPI once. Old saved size indices remain valid.
+- Bounded long DNA diagnostics to three lines with the full message on hover, preventing them from pushing the footer out of the window.
+- Browser tests cover all three sizes at DPR 1/1.25/1.5/1.75/2, short and oversized messages, both power states, footer margins, no overflow, circular header placement, automation feedback, popup bounds and unchanged XY scale/dragging. Five local C++/processor/VST3 suites pass. Windows CI checks editor dimensions and reopening; actual FL Studio wrapper/display-scale testing remains a user validation step.
+
 # Development update: dry power bypass and upper-mid texture
 
 - Analyzed both additional reference pairs before modifying the DSP. See REFERENCE_ANALYSIS.md for measurements, interpretation and limits.
