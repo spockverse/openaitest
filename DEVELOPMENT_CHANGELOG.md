@@ -1,3 +1,10 @@
+# Branding polish: ink-edge subtitle alignment and neon wordmark bloom
+
+- Aligned WUBWARE AUDIO with the vector lettering's visible left edge, accounting for the existing SVG inset at every scale. Subtitle wording, vertical spacing and header/control positions are preserved.
+- Added a static, alpha-based pink-purple inner halo and soft outer bloom. Original SVG paths, cuts, fill and proportions are unchanged; visible overflow preserves the glow outside the SVG box.
+- Verified byte-identical SVG artwork, subtitle/visible-ink alignment, unchanged control bounds, screenshots and rendered bloom clearance at all three sizes and 100/125/150/200% browser display scales. Existing region-editor checks pass. Actual FL Studio UI verification remains user-side.
+- No DSP, parameters, controls, project state, native dimensions or plugin-identity changes. Portable Windows development build only; no public release.
+
 # UI polish: suppress browser context menus
 
 - Disabled native WebView2 default context menus in the pinned JUCE build and canceled document context-menu defaults from the HTML head. Policy is local to WUBROT's embedded browser; no hooks into FL Studio's wrapper or global keyboard suppression.
