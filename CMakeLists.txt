@@ -68,3 +68,11 @@ set_tests_properties(WubrotProcessor PROPERTIES TIMEOUT 30)
 if(TARGET WubrotVst3Smoke)
     set_tests_properties(WubrotVst3Host PROPERTIES TIMEOUT 30)
 endif()
+
+if(WIN32)
+    add_custom_command(TARGET WUBROT_VST3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/Resources"
+            "$<TARGET_FILE_DIR:WUBROT_VST3>/../Resources/WubrotContent"
+        VERBATIM)
+endif()

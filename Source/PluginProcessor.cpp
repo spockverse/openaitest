@@ -129,6 +129,11 @@ juce::File WubrotProcessor::factoryRoot() const
 {
     const auto overridePath = juce::SystemStats::getEnvironmentVariable("WUBROT_CONTENT_DIR", {});
     if (overridePath.isNotEmpty()) return juce::File(overridePath).getChildFile("Presets/Factory");
+   #if JUCE_WINDOWS
+    const auto bundled = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+        .getParentDirectory().getSiblingFile("Resources").getChildFile("WubrotContent/Presets/Factory");
+    if (bundled.isDirectory()) return bundled;
+   #endif
     return juce::File::getSpecialLocation(juce::File::commonApplicationDataDirectory).getChildFile("Spock Audio/WUBROT/Presets/Factory");
 }
 const juce::String WubrotProcessor::getProgramName(int i) { return i >= 0 && i < 3 ? presetNames[i] : ""; }
