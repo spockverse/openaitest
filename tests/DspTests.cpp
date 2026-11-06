@@ -70,8 +70,38 @@ void checkMusicalSources()
         if (source == 0) check(std::abs(third) > .02 * std::abs(fundamental), "protected sub must still develop audible upper harmonics");
     }
 }
+void checkPowerBypass()
+{
+    for (double sr : {44100.,48000.,96000.})
+    for (int channels : {1,2})
+    {
+        CrushDSP effect, reference; effect.prepare(sr); reference.prepare(sr);
+        CrushDSP::Parameters p; p.drive=30; p.output=6; p.mix=1; p.mutate=1;
+        float weight=1;const float step=1/static_cast<float>(sr*.005);
+        for(int i=0;i<10000;++i)
+        {
+            p.enabled=(i/713)%2==0;
+            const float goal=p.enabled?1.0f:0.0f;
+            weight+=std::clamp(goal-weight,-step,step);
+            const float dry=.25f*std::sin(i*.021f);
+            float f[]{dry,-dry},wet[]{dry,-dry};
+            auto on=p;on.enabled=true;
+            reference.processFrame(wet,channels,on);effect.processFrame(f,channels,p);
+            for(int ch=0;ch<channels;++ch)
+            {
+                const float original=ch==0?dry:-dry;
+                const float expected=weight<=0?original:weight>=1?wet[ch]:original+weight*(wet[ch]-original);
+                check(std::abs(f[ch]-expected)<1e-6f,"power toggle must follow continuous 5ms crossfade without resets/dropouts");
+                if(weight==0)check(f[ch]==original,"bypassed dry must be bit-exact despite output +6dB and DNA");
+            }
+        }
+        effect.reset();p.enabled=false;
+        for(int i=0;i<1000;++i){float f[]{.1234f,-.321f};effect.processFrame(f,channels,p);check(f[0]==.1234f,"initially bypassed instance must be immediately transparent");}
+    }
+}
 int main()
 {
+    checkPowerBypass();
     checkMusicalSources();
     checkDna();
     constexpr double pi = 3.141592653589793;

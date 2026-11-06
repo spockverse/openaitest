@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -82,10 +83,20 @@ int main()
         auto legacyXml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize()));
         require(legacyXml != nullptr, "state XML missing");
         legacyXml->removeAttribute("dnaCharacter");
+        if (auto* power=legacyXml->getChildByAttribute("id","enabled")) legacyXml->removeChildElement(power,true);
         juce::MemoryBlock legacyState; juce::AudioProcessor::copyXmlToBinary(*legacyXml, legacyState);
-        WubrotProcessor legacy; legacy.setStateInformation(legacyState.getData(), static_cast<int>(legacyState.getSize()));
+        WubrotProcessor legacy; legacy.setParameterValue("enabled",0); legacy.setStateInformation(legacyState.getData(), static_cast<int>(legacyState.getSize()));
+        require(legacy.parameters.getRawParameterValue("enabled")->load()>.5f,"old projects must default ON even after loading a bypassed project");
         require(legacy.uiState()["waveform"].size() == 128, "legacy envelope-only DNA was lost");
         require(!render(legacy).empty(), "legacy project cannot render");
+        require(p.parameters.getParameter("enabled")->isAutomatable(),"power must be automatable");
+        p.setParameterValue("enabled",0);p.setParameterValue("output",6);
+        const auto dryBypass=render(p);
+        for(std::size_t i=0;i<dryBypass.size();++i) { const float expected=.35f*std::sin(static_cast<float>(i)*.061f);require(std::memcmp(&dryBypass[i],&expected,sizeof(float))==0,"processor bypass changed dry input"); }
+        juce::MemoryBlock offState;p.getStateInformation(offState);restored.setStateInformation(offState.getData(),static_cast<int>(offState.getSize()));
+        require(restored.parameters.getRawParameterValue("enabled")->load()<.5f,"bypass state did not recall");
+        require(restored.uiState()["name"].toString()=="transient-pattern.wav","bypass lost DNA");
+        p.setParameterValue("enabled",1);p.setParameterValue("output",-6);
         p.loadSampleBytes(juce::MemoryBlock("not a WAV", 9), "invalid.wav"); waitForSample(p);
         require(p.uiState()["name"].toString() == "transient-pattern.wav", "failed loading discarded working DNA");
         p.loadSampleBytes(wav(true), "silent.wav"); waitForSample(p);

@@ -1,3 +1,11 @@
+# Development update: dry power bypass and upper-mid texture
+
+- Analyzed both additional reference pairs before modifying the DSP. See REFERENCE_ANALYSIS.md for measurements, interpretation and limits.
+- Added a second signal-multiplied upper-mid carrier to create expressive high-frequency texture from subdued input, with no separate oscillator/noise playback.
+- Replaced ENGINE ACTIVE with a footer ENGINE ON/OFF power button. Automatable appended Engine On parameter, default ON, saved in project state. OFF crossfades over 5ms to bit-exact dry independent of output gain. All settings and DSP history remain intact.
+- Tested continuous crossfade math against a running wet reference, exact bypass, rapid toggles, mono/stereo, 44.1/48/96kHz, legacy state defaults, project recall and three-size browser alignment.
+- Added a timbre-only ROT DNA comparison with identical envelopes to verify meaningful frequency-content influence independently of rhythm.
+
 # Development update: metallic carrier, talking formants and spectral DNA
 
 - Added genuine ring modulation and two moving, peak-normalized resonant formants after the crusher. DRIVE engages these stages, XY maps carrier range and vowel movement, and the existing bit-depth/rate mapping remains intact. Carrier/filter controls are smoothed; the carrier is never mixed directly into audio.

@@ -22,3 +22,5 @@ Automated checks verify 211/411 Hz sidebands from a 100 Hz input and 311 Hz
 carrier, no leaked carrier, moving formant peaks, distinct DNA outputs,
 MUTATE-zero equality, silence, bounded peaks and state recall. These tests do
 not establish a subjective match to Corrosion or replace FL Studio listening.
+
+Update: a second input-multiplied upper-mid carrier adds texture from subdued input. Engine On is an appended automatable parameter. OFF uses a 5ms dry/processed crossfade, then bit-exact unity dry, independent of output/mix settings. Controls and DNA keep running during bypass.

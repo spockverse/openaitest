@@ -13,7 +13,8 @@ WubrotProcessor::WubrotProcessor()
       values { parameters.getRawParameterValue("x"), parameters.getRawParameterValue("y"),
                parameters.getRawParameterValue("mutate"), parameters.getRawParameterValue("drive"),
                parameters.getRawParameterValue("mode"), parameters.getRawParameterValue("mix"),
-               parameters.getRawParameterValue("output"), parameters.getRawParameterValue("protect") }
+               parameters.getRawParameterValue("output"), parameters.getRawParameterValue("protect"),
+               parameters.getRawParameterValue("enabled") }
 { startTimerHz(20); }
 WubrotProcessor::~WubrotProcessor() { stopTimer(); generation.fetch_add(1); sampleJobs.removeAllJobs(true, -1); }
 juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParameters()
@@ -28,6 +29,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
     p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { "mode", 1 }, "DNA Mode", juce::StringArray { "LOOP", "RETRIGGER" }, 0));
     add("mix", "Mix", 0, 100, 100, "%"); add("output", "Output", -24, 6, -6, "dB");
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "protect", 1 }, "Keep Sub", true));
+    p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "enabled", 1 }, "Engine On", true));
     return p;
 }
 void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); expectedSample = -1; }
@@ -45,7 +47,7 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     p.bits = 16 - (x + 1) * 7;
     p.rate = static_cast<float>(500 * std::pow(runningRate / 500, (y + 1) * .5));
     p.mutate = values[2]->load() * .01f; p.drive = values[3]->load(); p.mode = static_cast<int>(values[4]->load());
-    p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load();
+    p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load(); p.enabled = values[8]->load() >= .5f;
     if (auto* hostClock = getPlayHead())
         if (const auto position = hostClock->getPosition(); position && position->getIsPlaying())
             if (const auto samples = position->getTimeInSamples())
@@ -161,7 +163,7 @@ juce::var WubrotProcessor::uiState()
 {
     const juce::ScopedLock lock(metadataLock);
     auto object = std::make_unique<juce::DynamicObject>();
-    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect" })
+    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled" })
         object->setProperty(id, parameters.getRawParameterValue(id)->load());
     object->setProperty("name", sampleName); object->setProperty("status", status);
     object->setProperty("loading", loading.load()); object->setProperty("preset", currentPreset.load());
@@ -194,6 +196,11 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
+    if (!state.getChildWithProperty("id", "enabled").isValid())
+    {
+        juce::ValueTree on("PARAM"); on.setProperty("id", "enabled", nullptr); on.setProperty("value", 1.0f, nullptr);
+        state.appendChild(on, nullptr);
+    }
     DnaProfile profile;
     const auto envelope = juce::JSON::parse(state["envelope"].toString());
     const double duration = state["duration"];

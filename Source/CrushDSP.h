@@ -12,6 +12,7 @@ public:
     {
         float drive = 12, bits = 8, rate = 12000, mix = .65f, output = -6, protect = 1;
         float mutate = 0;
+        bool enabled = true;
         int mode = 0; // LOOP / RETRIGGER
     };
     void prepare(double rate)
@@ -28,7 +29,7 @@ public:
     {
         low.fill(0); held.fill(0); dcInput.fill(0); dcOutput.fill(0); previousDrive.fill(0); colourLow.fill(0); body.fill(0);
         tonal.reset(); character = .5f;
-        phase = 1; primed = false; loopTime = 0; resetModulation();
+        bypassWet = 1; phase = 1; primed = false; loopTime = 0; resetModulation();
     }
     void resetModulation() noexcept { retriggerTime = 0; modulation = 0; detector = 0; refractory = 0; retriggerArmed = false; }
     void setTimeline(double seconds) noexcept { loopTime = std::max(0.0, seconds); }
@@ -36,7 +37,11 @@ public:
     double getRetriggerTime() const noexcept { return retriggerTime; }
     void processFrame(float* frame, int channels, const Parameters& target, const DnaProfile* dna = nullptr) noexcept
     {
-        if (!primed) { current = target; primed = true; }
+        const std::array<float, 2> original { frame[0], channels == 2 ? frame[1] : 0 };
+        if (!primed) { current = target; bypassWet = target.enabled ? 1.0f : 0.0f; primed = true; }
+        const float goal = target.enabled ? 1.0f : 0.0f;
+        const float step = 1.0f / static_cast<float>(sampleRate * .005);
+        bypassWet += std::clamp(goal - bypassWet, -step, step);
         smooth(current.drive, std::clamp(target.drive, 0.0f, 36.0f));
         smooth(current.bits, std::clamp(target.bits, 2.0f, 16.0f));
         smooth(current.rate, std::clamp(target.rate, 500.0f, static_cast<float>(sampleRate)));
@@ -108,12 +113,15 @@ public:
         const float carrierHz = 60 + 280 * crush + 110 * reduction + 35 * sweep + dnaAmount * (600 * character + 160 * modulation);
         const float intensity = std::clamp(current.drive / 24, 0.0f, 1.0f);
         tonal.process(frame, channels, carrierHz, intensity * (.35f + .4f * crush + .2f * dnaAmount),
-                      vowel, 4 + 3 * dnaAmount * character, intensity * (.65f + .3f * dnaAmount));
+                      vowel, 4 + 3 * dnaAmount * character, intensity * (.65f + .3f * dnaAmount),
+                      intensity * (.3f + .5f * crush + .2f * dnaAmount * character));
         for (int ch = 0; ch < std::min(channels, 2); ++ch)
         {
             const auto c = static_cast<std::size_t>(ch);
             const float wet = softClip(frame[ch]) + current.protect * low[c];
-            frame[ch] = (dryFrame[c] + current.mix * (wet - dryFrame[c])) * output;
+            const float processed = (dryFrame[c] + current.mix * (wet - dryFrame[c])) * output;
+            frame[ch] = bypassWet <= 0 ? original[c] : bypassWet >= 1 ? processed
+                                    : original[c] + bypassWet * (processed - original[c]);
         }
         phase += static_cast<double>(rate) / sampleRate;
         loopTime += 1 / sampleRate; retriggerTime += 1 / sampleRate;
@@ -131,6 +139,6 @@ private:
     bool primed = false, retriggerArmed = false;
     Parameters current;
     TonalDSP tonal;
-    float character = .5f;
+    float character = .5f, bypassWet = 1;
     std::array<float, 2> low {}, held {}, dcInput {}, dcOutput {}, previousDrive {}, colourLow {}, body {};
 };

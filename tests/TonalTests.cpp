@@ -69,6 +69,10 @@ int main(int argc,char**argv)
     const float* a[]{soft.data()};const float* b[]{metal.data()};
     auto smooth=DnaProfile::analyse(a,1,soft.size(),sr),clang=DnaProfile::analyse(b,1,metal.size(),sr);
     require(clang.characterAt(.05)>smooth.characterAt(.05)+.3f,"DNA analysis did not distinguish brightness");
+    auto flatSmooth=smooth,flatMetal=clang;
+    flatSmooth.envelope.fill(1);flatMetal.envelope.fill(1);
+    auto timbreA=render(input,20,1,&flatSmooth),timbreB=render(input,20,1,&flatMetal);
+    require(difference(timbreA,timbreB)/std::max(rms(timbreA),rms(timbreB))>.35,"DNA timbre must differ even with identical envelopes");
     auto start=std::chrono::steady_clock::now();
     auto noDna=render(input,20,0,nullptr),zero=render(input,20,0,&clang),smoothOut=render(input,20,1,&smooth),metalOut=render(input,20,1,&clang);
     require(noDna==zero,"MUTATE zero retains DNA influence");

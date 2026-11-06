@@ -46,7 +46,7 @@ private:
     juce::File factoryRoot() const;
     CrushDSP dsp;
     DnaExchange profiles;
-    std::array<std::atomic<float>*, 8> values;
+    std::array<std::atomic<float>*, 9> values;
     juce::CriticalSection metadataLock; // Never used by processBlock.
     juce::String sampleName, status { "Load a WAV into ROT DNA." };
     juce::ThreadPool sampleJobs { 1 };
