@@ -107,7 +107,7 @@ void WubrotProcessor::loadSampleBytes(juce::MemoryBlock bytes, juce::String name
 void WubrotProcessor::decodeSample(std::unique_ptr<juce::InputStream> stream, const juce::String& name, std::uint64_t token)
 {
     if (token != generation.load()) return;
-    setStatus("Analysing sample envelope...");
+    setStatus("Analysing spectral shape, harmonics and dynamics...");
     juce::WavAudioFormat format;
     std::unique_ptr<juce::AudioFormatReader> reader(stream ? format.createReaderFor(stream.release(), true) : nullptr);
     if (!reader || reader->sampleRate < 8000 || reader->sampleRate > 384000 || reader->numChannels > 8 || reader->lengthInSamples < 1)
@@ -120,12 +120,12 @@ void WubrotProcessor::decodeSample(std::unique_ptr<juce::InputStream> stream, co
     const juce::ScopedLock lock(metadataLock);
     if (token != generation.load()) return;
     if (!profiles.publish(profile)) { status = "DNA is busy. Please load the WAV again."; return; }
-    sampleName = name; status = "DNA loaded. Envelope shapes the crusher; sample audio is not played.";
+    sampleName = name; status = "DNA loaded. Spectral profile shapes incoming harmonics; no sample playback.";
 }
 void WubrotProcessor::clearSample()
 {
     const juce::ScopedLock lock(metadataLock); generation.fetch_add(1); presetRequest.store(-1);
-    profiles.publish({}); sampleName.clear(); status = "DNA cleared. Conventional bitcrusher.";
+    profiles.publish({}); sampleName.clear(); status = "DNA cleared. Input-driven harmonic shaping remains active.";
 }
 juce::File WubrotProcessor::factoryRoot() const
 {
@@ -177,7 +177,7 @@ juce::var WubrotProcessor::uiState()
 void WubrotProcessor::getStateInformation(juce::MemoryBlock& destination)
 {
     const juce::ScopedLock lock(metadataLock);
-    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
+    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.removeProperty("dnaSpectrum", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
     state.setProperty("sampleName", sampleName, nullptr); state.setProperty("preset", currentPreset.load(), nullptr);
     auto reader = profiles.read();
     if (const auto* profile = reader.get(); profile && profile->valid)
@@ -187,6 +187,14 @@ void WubrotProcessor::getStateInformation(juce::MemoryBlock& destination)
         state.setProperty("duration", profile->duration, nullptr);
         juce::Array<juce::var> characterData; for (auto v : profile->character) characterData.add(v);
         state.setProperty("dnaCharacter", juce::JSON::toString(juce::var(characterData), true), nullptr);
+        if(profile->spectrum.valid)
+        {
+            juce::Array<juce::var> spectrum;
+            for(auto v:profile->spectrum.bands)spectrum.add(v);
+            for(auto v:profile->spectrum.features)spectrum.add(v);
+            for(auto v:profile->spectrum.peaks)spectrum.add(v);
+            state.setProperty("dnaSpectrum",juce::JSON::toString(juce::var(spectrum),true),nullptr);
+        }
     }
     if (auto xml = state.createXml()) copyXmlToBinary(*xml, destination);
 }
@@ -221,12 +229,27 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
             const float v = static_cast<float>((*array)[static_cast<int>(i)]);
             profile.character[i] = std::isfinite(v) ? juce::jlimit(0.0f, 1.0f, v) : .5f;
         }
+    const auto spectralData=juce::JSON::parse(state["dnaSpectrum"].toString());
+    if(auto* array=spectralData.getArray();profile.valid&&array&&array->size()==20)
+    {
+        bool valid=true;
+        for(int i=0;i<20;++i)
+        {
+            const float v=static_cast<float>((*array)[i]);
+            if(!std::isfinite(v)||v<0||v>(i<17?1.0f:10000.0f)||(i>=17&&v<100)){valid=false;break;}
+            if(i<12)profile.spectrum.bands[static_cast<std::size_t>(i)]=v;
+            else if(i<17)profile.spectrum.features[static_cast<std::size_t>(i-12)]=v;
+            else profile.spectrum.peaks[static_cast<std::size_t>(i-17)]=v;
+        }
+        profile.spectrum.valid=valid;
+        if(valid)profile.spectrum.prepareDerived();
+    }
     const juce::ScopedLock lock(metadataLock); generation.fetch_add(1); presetRequest.store(-1);
     editorSize.store(juce::jlimit(0, 2, static_cast<int>(state.getProperty("editorSize", 1))));
     parameters.replaceState(state); profiles.publish(profile);
     sampleName = profile.valid ? state["sampleName"].toString() : juce::String();
     currentPreset.store(juce::jlimit(0, 2, static_cast<int>(state["preset"])));
-    status = profile.valid ? "Project DNA restored (no external sample needed)." : "Project restored without DNA.";
+    status = !profile.valid ? "Project restored without DNA." : profile.spectrum.valid ? "Project spectral DNA restored (no external sample needed)." : "Legacy DNA restored. Reload WAV for richer spectral analysis.";
 }
 juce::AudioProcessorEditor* WubrotProcessor::createEditor() { return new WubrotEditor(*this); }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new WubrotProcessor(); }

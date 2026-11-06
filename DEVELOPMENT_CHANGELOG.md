@@ -1,3 +1,11 @@
+# Development update: input-derived tonal grit and spectral ROT DNA
+
+- Removed elapsed-time vowel sweeps and both free-running ring carriers. Live envelope, transient contrast and brightness now control coloration of the incoming waveform's own harmonics; silence and note gaps cannot play an independent yoi layer.
+- Added filtered 4x nonlinear processing, smoother asymmetric shaping, input-derived harmonic excitation and gentler drive mapping. Removed the extra post-crusher clipper; intentional bit/rate artifacts remain separate.
+- Replaced envelope/brightness-only DNA with spectral bands, resonance peaks, harmonic balance, flatness and dynamics controlling curve and filtering. Verified the original loading route before changing algorithms; added real decoder/publication/processor routing checks.
+- Added level-matched no-DNA/metallic/vocal-like/percussive comparisons, 50/100 MUTATE cases, sine/saw/stab/lowpass pairs, no-clock-motion and gap-silence checks, rhythm/pitch preservation checks and an alias-folding comparison. See DSP_INPUT_DRIVEN.md.
+- New spectral descriptors save with projects. Existing projects/automation/identity remain compatible; reload legacy DNA WAVs once to enable the richer profile. No UI, power, sizing or preset redesign. No public release.
+
 # Development update: header power and complete footer containment
 
 - Moved the circular illuminated power control beside the preset selector, matching the latest reference. Reinstated the read-only footer ENGINE ACTIVE / ENGINE BYPASSED status. The existing automatable Engine On parameter and click-free DSP bypass are unchanged.

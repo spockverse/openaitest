@@ -1,4 +1,5 @@
 #pragma once
+#include "DnaSpectrum.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -10,6 +11,7 @@ struct DnaProfile
     static constexpr std::size_t bins = 2048;
     std::array<float, bins> envelope {};
     std::array<float, bins> character = [] { std::array<float, bins> a {}; a.fill(.5f); return a; }();
+    DnaSpectrum spectrum;
     double duration = 0;
     bool valid = false;
     float at(double seconds) const noexcept
@@ -63,6 +65,7 @@ struct DnaProfile
         }
         if (maximum < 1.0e-7f) return p;
         for (auto& v : p.envelope) v /= maximum;
+        p.spectrum = DnaSpectrum::analyse(channels, channelCount, frames, sampleRate);
         p.valid = true; return p;
     }
 };

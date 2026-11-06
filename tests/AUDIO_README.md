@@ -1,26 +1,41 @@
-# WUBROT tonal-engine audition
+# WUBROT input-driven DSP audition
 
-Start with the listen-*.wav files: these share a target RMS of -15.9 dBFS.
-Compare dry, no DNA, smooth DNA at 100% MUTATE and metallic DNA at 100%.
-Every render uses the identical four-second 55 Hz sine/saw bass. The DNA
-fixtures are synthetic sounds supplied here for reproducibility, not playback layers.
-The numbered files retain actual output levels. Settings: DRIVE 20 dB,
-9 bits, 16 kHz effective rate, 100% wet, output -6 dB, low protection on.
+Start with these four WAVs. Each uses the IDENTICAL low-pass bass input and is
+matched to a common RMS level, with headroom reserved for transient examples:
 
-The carrier is multiplied with the input. Two resonant formants sweep oo/ah/ee.
-X still controls bits and also carrier range/movement speed. Y still controls
-sample rate and also tonal position. DRIVE engages the tonal stages as well as
-saturation. MUTATE controls sample-derived envelope/brightness contributions
-to carrier frequency/depth, vowel position and resonance. No additional controls.
+1. 01-no-DNA-matched.wav
+2. 2-metallic-DNA100-matched.wav
+3. 3-vocal-like-DNA100-matched.wav
+4. 4-percussive-DNA100-matched.wav
 
-LOOP repeats the analysis; RETRIGGER restarts it on transients/MIDI notes.
-Older saved envelope-only profiles load with neutral brightness; reloading the
-original WAV enables the new analysis. New projects embed both descriptors.
-Plugin identity and parameter automation IDs are unchanged. The sound changes.
+The source WAVs are clearly named DNA-source-*-synthetic.wav. The vocal-like
+fixture is synthesized harmonic/formant material, not a human vocal recording.
+These fixtures are reproducible probes, not proof of how every real sample sounds.
 
-Automated checks verify 211/411 Hz sidebands from a 100 Hz input and 311 Hz
-carrier, no leaked carrier, moving formant peaks, distinct DNA outputs,
-MUTATE-zero equality, silence, bounded peaks and state recall. These tests do
-not establish a subjective match to Corrosion or replace FL Studio listening.
+listen-sine, listen-saw, listen-stab and listen-lowpass dry/processed pairs show
+the processing on different sources. listen-DNA-0/1/2/3-50 and -100 files cover
+metallic, vocal-like, percussion and sustained tonal profiles at MUTATE 50/100.
+All listen/numbered audition files share approximately -23.3 dBFS RMS; no peak
+limiter or per-file clipping is used. Unprefixed source/processed files retain
+actual levels. Settings: DRIVE20dB, 9 bits, 16kHz effective rate, 100% wet,
+output -6dB, low protection ON. Input-derived filter movement is enabled.
 
-Update: a second input-multiplied upper-mid carrier adds texture from subdued input. Engine On is an appended automatable parameter. OFF uses a 5ms dry/processed crossfade, then bit-exact unity dry, independent of output/mix settings. Controls and DNA keep running during bypass.
+There is NO carrier oscillator or clock-driven vowel LFO in this engine.
+A 4x filtered nonlinear curve generates harmonics from the input, then a live
+input envelope/transient/brightness follower moves resonant filtering. Intentional
+bit/rate artifacts follow the oversampled shaper. Filter history decays and clears
+within 80ms of digital silence. No audio profile data is ever played back.
+
+DNA profiles now retain a 12-band spectrum, three resonance frequencies, spectral
+flatness, harmonic/even balance, crest and brightness, plus the existing envelope.
+MUTATE blends those into the curve, harmonic emphasis and resonances. Sample LOOP
+and RETRIGGER affect bounded coefficient movement in response to live articulation.
+New spectral data saves with the project. Old envelope-only projects remain valid;
+reload the original WAV once to create the richer profile. Plugin identity and
+parameter IDs are unchanged. Power bypass remains exact dry after a 5ms crossfade.
+
+Tests verify actual WAV-worker -> profile -> processor routing, MUTATE zero equality,
+matched-level sample/timbre differences, input pitch/harmonics, transport-time
+invariance without DNA, short-note gaps/silence and reduced folded products in a
+controlled 9kHz shaper test. Metrics do not guarantee a subjective Corrosion match.
+Real FL Studio listening remains necessary.

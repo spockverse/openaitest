@@ -13,13 +13,13 @@ static void waitForSample(WubrotProcessor& p)
     for (int i = 0; i < 2000 && p.isLoading(); ++i) juce::Thread::sleep(2);
     require(!p.isLoading(), "sample worker timed out");
 }
-static juce::MemoryBlock wav(bool silence = false)
+static juce::MemoryBlock wav(bool silence = false, float frequency = .13f)
 {
     juce::AudioBuffer<float> buffer(2, 24000);
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
         const float envelope = i % 6000 < 900 ? .8f : .08f;
-        const float value = silence ? 0 : envelope * std::sin(static_cast<float>(i) * .13f);
+        const float value = silence ? 0 : envelope * std::sin(static_cast<float>(i) * frequency);
         buffer.setSample(0, i, value); buffer.setSample(1, i, -value);
     }
     juce::MemoryBlock bytes; juce::WavAudioFormat format;
@@ -49,11 +49,30 @@ static std::vector<float> render(WubrotProcessor& p, bool midi = false)
     }
     return result;
 }
+static void checkDnaRouting()
+{
+    WubrotProcessor p; p.setParameterValue("mutate",0);
+    p.loadSampleBytes(wav(false,.015f),"tonal-fixture.wav");waitForSample(p);
+    juce::MemoryBlock stateA;p.getStateInformation(stateA);
+    auto xmlA=juce::AudioProcessor::getXmlFromBinary(stateA.getData(),static_cast<int>(stateA.getSize()));
+    require(xmlA&&juce::JSON::parse(xmlA->getStringAttribute("dnaSpectrum")).size()==20,"spectral profile not embedded after actual WAV loading");
+    const auto zeroA=render(p);p.setParameterValue("mutate",100);const auto fullA=render(p);
+    p.loadSampleBytes(wav(false,.4f),"bright-fixture.wav");waitForSample(p);
+    juce::MemoryBlock stateB;p.getStateInformation(stateB);
+    auto xmlB=juce::AudioProcessor::getXmlFromBinary(stateB.getData(),static_cast<int>(stateB.getSize()));
+    require(xmlB&&xmlB->getStringAttribute("dnaSpectrum")!=xmlA->getStringAttribute("dnaSpectrum"),"different WAVs published identical spectral parameters");
+    const auto fullB=render(p);p.setParameterValue("mutate",0);const auto zeroB=render(p);
+    require(zeroA==zeroB,"sample identity leaked through MUTATE zero in processor");
+    require(fullA!=fullB,"published DNA never reached actual processor output");
+    double delta=0,energy=0;for(std::size_t i=0;i<fullA.size();++i){delta+=(fullA[i]-fullB[i])*(fullA[i]-fullB[i]);energy+=fullA[i]*fullA[i];}
+    std::cout<<"Real WAV worker -> profile exchange -> DSP: MUTATE0 identical; MUTATE100 normalized waveform difference "<<std::sqrt(delta/(energy+1e-20))<<'\n';
+}
 int main()
 {
     juce::ScopedJuceInitialiser_GUI initialise;
     try
     {
+        checkDnaRouting();
         WubrotProcessor p;
        #if JUCE_WINDOWS
         for (int size = 0; size < 3; ++size)
@@ -83,6 +102,7 @@ int main()
         auto legacyXml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize()));
         require(legacyXml != nullptr, "state XML missing");
         legacyXml->removeAttribute("dnaCharacter");
+        legacyXml->removeAttribute("dnaSpectrum");
         if (auto* power=legacyXml->getChildByAttribute("id","enabled")) legacyXml->removeChildElement(power,true);
         juce::MemoryBlock legacyState; juce::AudioProcessor::copyXmlToBinary(*legacyXml, legacyState);
         WubrotProcessor legacy; legacy.setParameterValue("enabled",0); legacy.setStateInformation(legacyState.getData(), static_cast<int>(legacyState.getSize()));
