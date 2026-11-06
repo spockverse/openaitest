@@ -9,4 +9,4 @@ for i, line in enumerate(lines):
         indices.update(range(max(0, i - 2), min(len(lines), i + 9)))
 message = '\n'.join(lines[i] for i in sorted(indices)) if indices else '\n'.join(lines[-65:])
 message = message[-14000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-print('::error title=macOS compiler diagnostics::' + message)
+print('::error title=Build diagnostics::' + message)

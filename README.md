@@ -15,7 +15,7 @@ Bass transient detection uses a fixed threshold and 50 ms guard time; very quiet
 
 Mix (default 100%), Output (default −6 dB), and Keep Sub are available as host automation parameters without adding more panels to the interface. Keep Sub preserves a gently filtered band around 120 Hz. Output is not a limiter; watch your mixer levels.
 
-The approved black/purple interface, solar orb and deforming membrane are embedded in the Windows/macOS plugin. Native audio runs separately from the web renderer. Closing the editor does not stop processing. Linux development builds currently use a functional native fallback editor.
+The approved black/purple interface, solar orb and deforming membrane are embedded in the Windows plugin. Native audio runs separately from the web renderer. Closing the editor does not stop processing. The cloud development build uses a native fallback editor for automated testing. Windows is the only current release target.
 
 ## Three factory presets and their samples
 
@@ -45,9 +45,9 @@ python3 tools/validate_factory.py                  # required for installers
 python3 tools/validate_factory.py --allow-missing  # development manifests only
 ```
 
-On Windows the installer puts the VST3 bundle into `C:\Program Files\Common Files\VST3\WUBROT.vst3` and factory content under `C:\ProgramData\Spock Audio\WUBROT\Presets\Factory`. Each preset's sample remains inside its own folder. On macOS the pkg uses `/Library/Audio/Plug-Ins/{VST3,Components}` and `/Library/Application Support/Spock Audio/WUBROT/Presets/Factory`.
+On Windows the installer puts the VST3 bundle into `C:\Program Files\Common Files\VST3\WUBROT.vst3` and factory content under `C:\ProgramData\Spock Audio\WUBROT\Presets\Factory`. Each preset's sample remains inside its own folder.
 
-For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resources directory**, not to Factory. Installed use requires no variable. Projects embed the analysed envelope, its duration and display name, so the audible DNA survives moving/deleting the source WAV or opening on the other supported OS. The original audio file is not embedded or played.
+For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resources directory**, not to Factory. Installed use requires no variable. Projects embed the analysed envelope, its duration and display name, so the audible DNA survives moving/deleting the source WAV or moving the project to another Windows computer. The original audio file is not embedded or played.
 
 ## Getting a Windows build without compiling yourself
 
@@ -60,16 +60,13 @@ The project files must be committed and pushed to GitHub first. Environment publ
 
 The editor requires the Microsoft Edge WebView2 Evergreen Runtime, normally present on current Windows systems. If absent, install it from Microsoft's WebView2 page and reopen the editor. The installer offers a link; it does not bundle or silently download this Microsoft runtime. No proprietary factory WAVs or signing credentials are included in this source checkout.
 
-## DAW/platform formats
+## Windows DAW support
 
-| Platform / DAW | Format built | Current validation |
-| --- | --- | --- |
-| Windows x64: FL Studio, Ableton Live, Cubase and other VST3 hosts | VST3 | Build workflow provided; Windows/DAW testing pending |
-| macOS Intel / Apple Silicon: Logic Pro | Audio Unit (AU) | Universal build and `auval` workflow provided; macOS/Logic testing pending |
-| macOS: Live, Cubase, FL Studio and other VST3 hosts | VST3 | Universal build workflow provided; host testing pending |
-| Linux development | VST3 | Built and loaded through real VST3 interfaces; audio and state tests pass |
+The current release target is **Windows x64 VST3**: FL Studio, Ableton Live, Cubase and other Windows VST3 hosts. The Windows CI build and audio/state tests passed. A separate real-VST3 loading/processing smoke test is included. Real listening and interaction tests in FL Studio and the other DAWs are still required; this is an early development build.
 
-Logic Pro does not load VST3: use the macOS AU. A Windows setup.exe cannot install a macOS plugin. The macOS workflow can build a separate pkg when all factory content is present. This is an early development version, not a claim of compatibility already tested in all DAWs. macOS/Windows development packages are unsigned; signing and macOS notarisation remain release tasks.
+macOS, Audio Units, Logic Pro and Linux releases are deferred. There is no current macOS installer or AU build workflow. Source code is portable for local testing, but only Windows is being packaged now.
+
+Windows development builds are unsigned. Signing remains a release task.
 
 ## Developer build
 
@@ -84,15 +81,7 @@ cmake --build build --config Release --parallel 2
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-macOS (Xcode command-line tools):
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-cmake --build build --parallel 3
-ctest --test-dir build --output-on-failure
-```
-
-VST3 output is `build/WUBROT_artefacts/Release/VST3/WUBROT.vst3`; macOS AU output is in `build/WUBROT_artefacts/Release/AU/WUBROT.component`.
+VST3 output is `build/WUBROT_artefacts/Release/VST3/WUBROT.vst3`.
 
 Linux prerequisites include ALSA, X11/Xext/Xinerama/Xrandr/Xcursor, FreeType/fontconfig and GL development libraries. Web UI is disabled by default on Linux. To validate only the portable audio core without JUCE:
 
@@ -103,8 +92,8 @@ ctest --test-dir build --output-on-failure
 python3 tests/test_factory.py
 ```
 
-`tests/DspTests.cpp` exercises sample analysis, loop wrapping, MUTATE zero, audible DNA influence, no sample layering, transient/MIDI reset, concurrent profile publication, automation, mono/stereo and multiple sample rates. `tests/ProcessorTests.cpp` tests actual WAV decoding, project recall, failed-load preservation and nested factory content. Linux additionally loads the actual compiled VST3 bundle through Steinberg interfaces and processes audio. Browser tests exercise the UI bridge separately; that is not equivalent to testing WebView2/WKWebView inside every DAW.
+`tests/DspTests.cpp` exercises sample analysis, loop wrapping, MUTATE zero, audible DNA influence, no sample layering, transient/MIDI reset, concurrent profile publication, automation, mono/stereo and multiple sample rates. `tests/ProcessorTests.cpp` tests actual WAV decoding, project recall, failed-load preservation and nested factory content. Windows CI and the cloud development tests additionally load the actual compiled VST3 bundle through Steinberg interfaces and process audio. Browser tests exercise the UI bridge separately; that is not equivalent to testing WebView2 inside every DAW.
 
 ## Framework licensing
 
-JUCE has AGPL/commercial licensing terms. Check the appropriate JUCE licence before distributing a closed-source product. The VST3 SDK and platform dependencies retain their own licences. Factory samples must be ones you can include with the product. This project does not supply a JUCE commercial licence, proprietary samples, Apple certificates or Windows signing certificates.
+JUCE has AGPL/commercial licensing terms. Check the appropriate JUCE licence before distributing a closed-source product. The VST3 SDK and platform dependencies retain their own licences. Factory samples must be ones you can include with the product. This project does not supply a JUCE commercial licence, proprietary samples or Windows signing certificates.

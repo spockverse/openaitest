@@ -1,6 +1,6 @@
 # WUBROT interaction study
 
-Open WUBROT.html in Edge or Chrome on Windows. It is self-contained, works without a server, and needs no installation or internet access. This is a visual prototype based on the supplied mockup, not a new VST build. The existing GridCrush audio code remains unchanged. Nothing was pushed to GitHub or published.
+Open WUBROT.html in Edge or Chrome on Windows. It is self-contained, works without a server, and needs no installation or internet access. The HTML is a standalone visual preview and is also embedded in the Windows VST3 with a native audio/control bridge. Standalone HTML does not process audio. Source is available on the wubrot/audio-engine development branch; environment publication is separate.
 
 ## Agreed direction implemented for review
 
@@ -19,13 +19,13 @@ Rendering follows browser refresh while the surface is active. Once settled, the
 
 The texture remains embedded in the HTML for a single offline download. Waveform analysis stays capped at 65536 probes, first 30 seconds, and 20 MB per WAV. These are bounded-work choices; target Windows CPU/GPU usage and VST integration are not yet measured.
 
-## Audio implementation proposal — still to validate
+## Current audio implementation
 
-Keep sample analysis, rendering, and file access off the audio thread. Transfer a compact precomputed DNA profile to the DSP. Smooth automated controls, avoid allocations/locks in the audio callback, retain clean low-frequency blending, and distinguish deliberate sample-rate aliasing from unwanted distortion aliasing. Evaluate oversampling around the nonlinear drive stage with a selectable quality mode; oversampling the entire crusher could change the intended texture. Compare dither on/off for quantisation noise. Add output metering, level-matched comparisons, and a deliberate output protection option.
+The C++ engine analyses a normalised 2048-bin sample envelope off the audio thread, then publishes immutable modulation data to the processor. MUTATE scales sample-envelope modulation of bit depth and effective sample rate; at zero the sample has no influence. LOOP follows the original sample duration and host timeline; RETRIGGER starts a one-shot pattern on bass transients or sample-positioned MIDI note-ons. Project state embeds the derived envelope, so audible DNA recall does not require the source WAV.
 
-The visual sample imprint should initially remain independent of the sound. A future Sample Morph audio mode needs a defined musical mapping and A/B listening tests before being described as implemented. Proposed mapping: a small amount of DNA-driven waveshaping controlled by Mutate, while X/Y retain predictable bit-depth and rate control.
+DRIVE uses antiderivative antialiasing before the intentional quantisation/sample-rate aliasing. Parameter smoothing, DC removal and optional low-band protection are implemented. Audio callbacks do not do file access or editor rendering. Windows native controls, sample byte transfer, preset events and host automation/state updates are bridged to this processor.
 
-Before release, measure audio CPU and editor CPU separately at 44.1/48/96 kHz, multiple buffer sizes and multiple instances. Test FL Studio automation/state recall, sample relocation/restoration, editor reopening, mono/stereo, silence, and extreme values. No high-quality audio or low-CPU performance claim is established by this UI study.
+Sample-derived waveshaping, spectral/formant transfer, tempo-stretching, release signing and listening validation in real DAWs remain future work. Current release work targets Windows x64 VST3 only.
 
 ## Validation
 
@@ -46,3 +46,6 @@ Idle visibility correction: increased the radial displacement and travelling hig
 ## Embedded-sphere membrane revision
 
 The artwork previously retained its original central cavity and irregular silhouette. A circle-preserving nonlinear disk mapping now places that cavity at the actual orb coordinates, with a uniform filled circular crop and a pinned boundary. The source texture is deformed rather than translated. Orb-relative waves, contact attenuation, and an independently damped material-lag state add local refraction and elastic/viscous response; the indentation remains at the new position after gesture energy decays. Guide rings follow the sphere while the crosshair stays fixed as a UI reference. The Canvas fallback uses a polar deforming mesh with the equivalent disk mapping. This is an interactive 2D membrane approximation, not a volumetric soft-body solver. Chromium checks exercised all four cardinal extremes, retained deformation and lag settling, both renderers, and script/GL errors. Both rendered views were inspected.
+
+
+The current product target is Windows x64 VST3 only. macOS/AU and Linux releases are deferred. The approved web interface is embedded in the Windows plugin with a native parameter/sample bridge and a compact LOOP / RETRIGGER toggle in ROT DNA.

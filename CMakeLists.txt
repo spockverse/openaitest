@@ -22,11 +22,8 @@ FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.
     GIT_TAG 51a8a6d7aeae7326956d747737ccf1575e61e209 GIT_SHALLOW FALSE)
 FetchContent_MakeAvailable(JUCE)
 set(WUBROT_FORMATS VST3)
-if(APPLE)
-    list(APPEND WUBROT_FORMATS AU)
-endif()
 set(WUBROT_WEB_UI_DEFAULT OFF)
-if(WIN32 OR APPLE)
+if(WIN32)
     set(WUBROT_WEB_UI_DEFAULT ON)
 endif()
 option(WUBROT_WEB_UI "Use the approved web editor (requires WebView2 or WebKit)" ${WUBROT_WEB_UI_DEFAULT})
@@ -36,7 +33,7 @@ juce_add_plugin(WUBROT
     FORMATS ${WUBROT_FORMATS} PRODUCT_NAME "WUBROT"
     IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE VST3_CATEGORIES Fx Distortion
-    AU_MAIN_TYPE kAudioUnitType_MusicEffect NEEDS_WEBVIEW2 ${WUBROT_WEB_UI})
+    NEEDS_WEBVIEW2 ${WUBROT_WEB_UI})
 target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
 target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}>
     JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
@@ -56,10 +53,17 @@ target_compile_definitions(WubrotIntegrationTests PRIVATE JUCE_GLOBAL_MODULE_SET
 target_link_libraries(WubrotIntegrationTests PRIVATE WUBROT)
 add_test(NAME WubrotProcessor COMMAND WubrotIntegrationTests)
 set_tests_properties(WubrotProcessor PROPERTIES ENVIRONMENT "WUBROT_CONTENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Resources")
-if(UNIX AND NOT APPLE)
+if(WIN32 OR (UNIX AND NOT APPLE))
     add_executable(WubrotVst3Smoke tests/Vst3Smoke.cpp)
     target_include_directories(WubrotVst3Smoke PRIVATE ${juce_SOURCE_DIR}/modules/juce_audio_processors/format_types/VST3_SDK)
-    target_link_libraries(WubrotVst3Smoke PRIVATE dl)
+    if(UNIX)
+        target_link_libraries(WubrotVst3Smoke PRIVATE dl)
+    endif()
     add_dependencies(WubrotVst3Smoke WUBROT_VST3)
     add_test(NAME WubrotVst3Host COMMAND WubrotVst3Smoke "$<TARGET_FILE:WUBROT_VST3>")
+endif()
+
+set_tests_properties(WubrotProcessor PROPERTIES TIMEOUT 30)
+if(TARGET WubrotVst3Smoke)
+    set_tests_properties(WubrotVst3Host PROPERTIES TIMEOUT 30)
 endif()

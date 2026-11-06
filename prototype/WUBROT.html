@@ -276,6 +276,9 @@ let liquid=!reduced, motion=!reduced, dragging=false, frameRequest=0, last=0, px
 let waveform=null, sharpness=0, sampleLoaded=false, loadVersion=0,displaySampleRate=44100;
 const nativeBackend=window.__JUCE__?.backend;
 let applyingNative=false,dnaMode=0;
+const nativeTouches=new Set();
+function beginNativeTouch(id){if(!nativeTouches.has(id)){nativeTouches.add(id);nativeEvent("gesture",{id,start:true});}}
+function endNativeTouch(id){if(nativeTouches.delete(id))nativeEvent("gesture",{id,start:false});}
 function nativeEvent(type,data={}){if(nativeBackend&&!applyingNative)nativeBackend.emitEvent('wubrot',{type,...data});}
 function nativeParameter(id,value){nativeEvent('parameter',{id,value});}
 function setDnaMode(mode,notify=true){dnaMode=mode===1?1:0;$('dnaLoop').setAttribute('aria-pressed',dnaMode===0);$('dnaRetrigger').setAttribute('aria-pressed',dnaMode===1);if(notify){nativeEvent('gesture',{id:'mode',start:true});nativeParameter('mode',dnaMode);nativeEvent('gesture',{id:'mode',start:false});}}
@@ -299,7 +302,7 @@ function pointer(e,excite=true){
 canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;dragging=true;canvas.setPointerCapture(e.pointerId);canvas.focus();nativeEvent("gesture",{id:"x",start:true});nativeEvent("gesture",{id:"y",start:true});pointer(e,false);});
 canvas.addEventListener('pointermove',e=>{if(dragging)pointer(e);});
 const end=()=>{if(dragging){nativeEvent('gesture',{id:'x',start:false});nativeEvent('gesture',{id:'y',start:false});}dragging=false;};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
-canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=py;if(e.key==='ArrowLeft')x-=step;else if(e.key==='ArrowRight')x+=step;else if(e.key==='ArrowUp')y-=step;else if(e.key==='ArrowDown')y+=step;else if(e.key==='Home'){x=0;y=0;}else return;e.preventDefault();setXY(x,y);});
+canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=py;if(e.key==='ArrowLeft')x-=step;else if(e.key==='ArrowRight')x+=step;else if(e.key==='ArrowUp')y-=step;else if(e.key==='ArrowDown')y+=step;else if(e.key==='Home'){x=0;y=0;}else return;e.preventDefault();nativeEvent("gesture",{id:"x",start:true});nativeEvent("gesture",{id:"y",start:true});setXY(x,y);nativeEvent("gesture",{id:"x",start:false});nativeEvent("gesture",{id:"y",start:false});});
 const membrane={x:0,y:0,vx:0,vy:0};
 const fallbackGrid=8,fallbackSectors=64,fallbackPoints=new Float32Array(9*65*2),fallbackSources=new Float32Array(9*65*2);
 let fallbackArtwork=null;
@@ -380,7 +383,12 @@ function syncButtons(){$('liquid').setAttribute('aria-pressed',liquid);$('liquid
 $('liquid').onclick=()=>{liquid=!liquid;gel.reset();syncButtons();schedule();};$('motion').onclick=()=>{motion=!motion;last=0;gel.reset();syncButtons();schedule();};
 function controls(){for(const id of ['mutate','drive']){const v=+$(id).value;$(id+'Dial').style.setProperty('--turn',(v/(id==='drive'?36:100)*270)+'deg');$(id+'Value').textContent=id==='drive'?v.toFixed(1):v+'%';}$('influenceValue').textContent=$('influence').value+'%';schedule();}
 for(const id of ['mutate','drive','influence'])$(id).oninput=()=>{controls();if(id!=='influence')nativeParameter(id,+$(id).value);};
-for(const id of ['mutate','drive']){$(id).addEventListener('pointerdown',()=>nativeEvent('gesture',{id,start:true}));$(id).addEventListener('pointerup',()=>nativeEvent('gesture',{id,start:false}));$(id).addEventListener('pointercancel',()=>nativeEvent('gesture',{id,start:false}));}
+for(const id of ['mutate','drive']){
+ $(id).addEventListener('pointerdown',e=>{$(id).setPointerCapture(e.pointerId);beginNativeTouch(id);});
+ for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])$(id).addEventListener(event,()=>endNativeTouch(id));
+ $(id).addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))beginNativeTouch(id);});
+ $(id).addEventListener('keyup',()=>endNativeTouch(id));
+}
 $('preset').onchange=()=>{if(nativeBackend){nativeEvent('preset',{index:$('preset').selectedIndex});return;}const v=$('preset').value;$('mutate').value=v==='glass'?25:v==='metal'?92:67;$('drive').value=v==='glass'?4:v==='metal'?22:8.5;setXY(v==='metal'?-.55:v==='glass'?.35:0,v==='metal'?-.45:v==='glass'?.2:0);controls();};
 function drawWave(){wc.clearRect(0,0,600,130);const g=wc.createLinearGradient(0,0,600,0);g.addColorStop(0,'#8052df');g.addColorStop(1,'#e493ff');wc.strokeStyle=g;wc.lineWidth=2;wc.beginPath();for(let i=0;i<128;i++){const amp=waveform?waveform[i]*54:(Math.abs(Math.sin(i*1.73))*Math.abs(Math.sin(i*.16))*.7+.12)*Math.sin((i+4)/136*Math.PI)*52;wc.moveTo(i*4.65+3,65-amp);wc.lineTo(i*4.65+3,65+amp);}wc.stroke();}
 async function loadSample(file){
@@ -428,7 +436,7 @@ if(nativeBackend){
   applyingNative=true;
   try{
    if(!dragging&&Number.isFinite(state.x)&&Number.isFinite(state.y))setXY(state.x,state.y,true,1/20);
-   for(const id of ['mutate','drive'])if(document.activeElement!==$(id)&&Number.isFinite(state[id]))$(id).value=state[id];
+   for(const id of ['mutate','drive'])if(!nativeTouches.has(id)&&Number.isFinite(state[id]))$(id).value=state[id];
    setDnaMode(state.mode,false);controls();$('preset').selectedIndex=state.preset;
    if(Number.isFinite(state.sampleRate)&&state.sampleRate>=8000){displaySampleRate=state.sampleRate;readouts();}
    $('sampleStatus').textContent=state.status;$('drop').classList.toggle('loading',!!state.loading);$('drop').setAttribute('aria-busy',String(!!state.loading));

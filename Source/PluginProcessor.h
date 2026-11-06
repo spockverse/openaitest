@@ -23,7 +23,7 @@ public:
     double getTailLengthSeconds() const override { return .1; }
     int getNumPrograms() override { return 3; }
     int getCurrentProgram() override { return currentPreset.load(); }
-    void setCurrentProgram(int index) override { if (index >= 0 && index < 3) presetRequest.store(index); }
+    void setCurrentProgram(int index) override { if (index >= 0 && index < 3) { currentPreset.store(index); presetRequest.store(index); } }
     const juce::String getProgramName(int) override;
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override;

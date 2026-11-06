@@ -82,7 +82,7 @@ int main()
         axis.setParameterValue("y", 1); const auto bottom = render(axis);
         auto steps = [](const std::vector<float>& audio) { int count = 0; for (std::size_t i = 1; i < audio.size(); ++i) if (std::abs(audio[i] - audio[i - 1]) > .01f) ++count; return count; };
         require(steps(bottom) > steps(top) * 10, "XY up must reduce the sample rate, not increase it");
-        p.setCurrentProgram(2); juce::Thread::sleep(75); juce::Timer::callPendingTimersSynchronously();
+        p.setCurrentProgram(2); require(p.getCurrentProgram() == 2, "host preset selection must acknowledge immediately"); juce::Thread::sleep(75); juce::Timer::callPendingTimersSynchronously();
         require(p.getNumPrograms() == 3, "factory preset count");
         const auto folder = juce::File::createTempFile("-wubrot-content"); folder.deleteFile(); folder.createDirectory();
         const auto factory = folder.getChildFile("Presets/Factory/01 Riddim Monster"); factory.createDirectory();

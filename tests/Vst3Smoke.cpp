@@ -1,10 +1,20 @@
-// Load the actual Linux VST3 bundle through Steinberg interfaces, not the processor class.
+// Load the actual Windows/Linux VST3 bundle through Steinberg interfaces, not the processor class.
 #include <pluginterfaces/base/ipluginbase.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstaudioprocessor.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
 #include <pluginterfaces/vst/vstspeaker.h>
-#include <dlfcn.h>
+#if defined(_WIN32)
+ #include <windows.h>
+ static void* openLibrary(const char* path) { return reinterpret_cast<void*>(LoadLibraryA(path)); }
+ static void* getSymbol(void* handle, const char* name) { return reinterpret_cast<void*>(GetProcAddress(reinterpret_cast<HMODULE>(handle), name)); }
+ static void closeLibrary(void* handle) { FreeLibrary(reinterpret_cast<HMODULE>(handle)); }
+#else
+ #include <dlfcn.h>
+ static void* openLibrary(const char* path) { return dlopen(path, RTLD_NOW | RTLD_LOCAL); }
+ static void* getSymbol(void* handle, const char* name) { return dlsym(handle, name); }
+ static void closeLibrary(void* handle) { dlclose(handle); }
+#endif
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -31,11 +41,18 @@ int main(int argc, char** argv)
     try
     {
         require(argc == 2, "provide VST3 shared-library path");
-        void* library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL); if (!library) throw std::runtime_error(dlerror());
-        const auto enter = reinterpret_cast<bool (*)(void*)>(dlsym(library, "ModuleEntry"));
-        const auto exit = reinterpret_cast<bool (*)()>(dlsym(library, "ModuleExit"));
-        const auto getFactory = reinterpret_cast<IPluginFactory* (*)()>(dlsym(library, "GetPluginFactory"));
-        require(enter && exit && getFactory && enter(library), "VST3 module entry failed");
+        void* library = openLibrary(argv[1]); require(library != nullptr, "VST3 library could not be opened");
+       #if defined(_WIN32)
+        const auto enter = reinterpret_cast<bool (*)()>(getSymbol(library, "InitDll"));
+        const auto exit = reinterpret_cast<bool (*)()>(getSymbol(library, "ExitDll"));
+        require(enter && exit && enter(), "VST3 module entry failed");
+       #else
+        const auto enter = reinterpret_cast<bool (*)(void*)>(getSymbol(library, "ModuleEntry"));
+        const auto exit = reinterpret_cast<bool (*)()>(getSymbol(library, "ModuleExit"));
+        require(enter && exit && enter(library), "VST3 module entry failed");
+       #endif
+        const auto getFactory = reinterpret_cast<IPluginFactory* (*)()>(getSymbol(library, "GetPluginFactory"));
+        require(getFactory != nullptr, "VST3 factory entry missing");
         auto* factory = getFactory(); require(factory != nullptr, "no VST3 factory");
         PClassInfo info {}; IComponent* component = nullptr;
         for (int i = 0; i < factory->countClasses(); ++i)
@@ -68,7 +85,7 @@ int main(int argc, char** argv)
             }
         }
         require(difference > 100, "actual VST3 did not process the bass");
-        processor->setProcessing(false); component->setActive(false); processor->release(); component->terminate(); component->release(); factory->release(); exit(); dlclose(library);
+        processor->setProcessing(false); component->setActive(false); processor->release(); component->terminate(); component->release(); factory->release(); exit(); closeLibrary(library);
         std::cout << "PASS: real VST3 discovery, initialization, stereo buses, 38400 processed frames and shutdown\n";
     }
     catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
