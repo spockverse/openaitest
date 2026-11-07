@@ -62,7 +62,7 @@ jobs:
           python tools/prepare_benchmark_baseline.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $PSNativeCommandUseErrorActionPreference = $false
-          cmake -S benchmark-baseline-source -B benchmark-baseline-build -A x64 "-DFETCHCONTENT_SOURCE_DIR_JUCE=${{ github.workspace }}/build/_deps/juce-src" "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${{ github.workspace }}/webview2" -DWUBROT_VERSION=0.2.37 *> baseline-configure.log
+          cmake -S benchmark-baseline-source -B benchmark-baseline-build -A x64 "-DFETCHCONTENT_SOURCE_DIR_JUCE=${{ github.workspace }}/build/_deps/juce-src" "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${{ github.workspace }}/webview2" "-DWUBROT_VERSION=0.2.37" *> baseline-configure.log
           $task_status = $LASTEXITCODE
           Get-Content baseline-configure.log
           if ($task_status -ne 0) { python tools/ci_error_annotation.py baseline-configure.log; exit $task_status }
