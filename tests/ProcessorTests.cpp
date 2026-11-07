@@ -122,6 +122,7 @@ static void checkLoadingRoutes()
 }
 static void checkVisualObserver()
 {
+    juce::ScopedNoDenormals noDenormals; // Same floating-point mode as processBlock.
     for(const double rate:{44100.0,48000.0,96000.0})for(const int channels:{1,2})for(const int blockSize:{64,512,4096})
     {
         WubrotProcessor processor;processor.clearSample();

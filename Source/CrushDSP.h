@@ -4,6 +4,7 @@
 #include "NonlinearStage.h"
 #include "CleanCrusher.h"
 #include "SignedCharacter.h"
+#include "SineCrush.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -24,7 +25,7 @@ public:
         lowCoefficient=1-std::exp(-2*pi*120/static_cast<float>(sampleRate));
         colourCoefficient=1-std::exp(-2*pi*1800/static_cast<float>(sampleRate));
         dcCoefficient=std::exp(-2*pi*12/static_cast<float>(sampleRate));detectorRelease=std::exp(-1/static_cast<float>(sampleRate*.04));
-        nonlinear.prepare();crusher.prepare(sampleRate);tonal.prepare(sampleRate);controlInterval=std::max(1,int(sampleRate/250));reset();
+        nonlinear.prepare();crusher.prepare(sampleRate);tonal.prepare(sampleRate);sineCrush.prepare(sampleRate);controlInterval=std::max(1,int(sampleRate/250));reset();
     }
     void reset()
     {
@@ -40,6 +41,7 @@ public:
     {
         const bool modern=target.processingVersion>=3;
         const bool impact=target.processingVersion>=4;
+        const bool sine=target.processingVersion>=5;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -121,11 +123,29 @@ public:
             for(std::size_t i=0;i<modernControl.size();++i)modernStep[i]=(controlGoal[i]-modernControl[i])/float(controlInterval);
             crusher.setModern(current.bits,current.rate,modernCharacter.antiAlias,modernCharacter.rebuild,controlInterval);
             tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact);
+            if(sine){
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,driveUnit,current.protect,articulation,controlInterval);
+                // Keep optional DNA coloration; no generic moving resonators in the core.
+                tonal.setModern(.4f,.25f*influence,influence,modernShape,0,controlInterval,false);
+            }
             controlRemaining=controlInterval;
         }
         if(modern){for(std::size_t i=0;i<modernControl.size();++i)modernControl[i]+=modernStep[i];--controlRemaining;}
         const float output=modern?modernControl[3]:std::pow(10.0f,current.output/20);
         const std::array<float,2> dry {frame[0],channels==2?frame[1]:0};
+        if(sine)
+        {
+            sineCrush.process(frame,channels);
+            tonal.processModern(frame,channels);
+            for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
+                const float blend=std::min(1.f,current.activity*8)*current.mix;
+                const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;
+                frame[ch]=original[c]+bypassWet*(processed-original[c]);
+            }
+            loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;
+            if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
+            return;
+        }
         const int tail=static_cast<int>(sampleRate*.08);
         if(peak<=0)silentFrames=std::min(silentFrames+1,tail+1);else silentFrames=0;
         if(silentFrames==tail)clearAudio();
@@ -177,7 +197,7 @@ public:
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
     }
 private:
-    void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();}
+    void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();sineCrush.reset();}
     float coefficient(float seconds)const noexcept{return 1-std::exp(-1/static_cast<float>(sampleRate*seconds));}
     void smooth(float& v,float target)const noexcept{v+=smoothCoefficient*(target-v);}
     static constexpr float pi=3.14159265359f;
@@ -189,6 +209,6 @@ private:
     DnaSpectrum smoothedSpectrum;float dnaPresence=0;
     int controlInterval=192,controlRemaining=0;bool controlPrimed=false;
     DnaTemporalFrame modernShape;SignedCharacter modernCharacter;std::array<float,6> modernControl{},modernStep{};
-    Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;
+    Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;SineCrush sineCrush;
     std::array<float,2> low{},dcInput{},dcOutput{},colour{};
 };

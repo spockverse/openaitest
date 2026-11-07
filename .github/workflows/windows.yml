@@ -61,13 +61,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force build/Performance | Out-Null
           $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v041-closed closed 3
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v042-closed closed 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance revised-closed closed 4
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance sine-closed closed 5
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v041-open ui 3
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v042-open ui 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance revised-open ui 4
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance sine-open ui 5
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/compare_callback_benchmarks.py build/Performance
           exit $LASTEXITCODE
