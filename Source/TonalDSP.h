@@ -46,9 +46,9 @@ public:
         }
     }
     void setModern(float vowel, float amount, float mutation, const DnaTemporalFrame &shape, float warmth,
-                   int frames) noexcept
+                   int frames, bool impact=false) noexcept
     {
-        std::array<float, 26> key{};
+        std::array<float, 27> key{};
         key[0] = vowel;
         key[1] = amount;
         key[2] = mutation;
@@ -63,6 +63,7 @@ public:
         for (float v : shape.persistence)
             key[cursor++] = v;
         key[cursor++] = shape.features[0];
+        key[cursor++] = impact ? 1.f : 0.f;
         if (modernPrimed && key == modernKey)
         {
             modern = modernGoal;
@@ -70,8 +71,9 @@ public:
             return;
         }
         modernKey = key;
-        const float contrast = mutation * mutation * (.35f + .65f * mutation);
-        const std::array<float, 3> base{320 + 650 * vowel, 900 + 1400 * vowel, 2600 + 1500 * vowel};
+        const float contrast = impact ? mutation*(.55f+.45f*mutation) : mutation * mutation * (.35f + .65f * mutation);
+        // Warm-region body uses the same resonators; full DNA still targets its own peaks.
+        const std::array<float, 3> base{(320 + 650 * vowel)*(impact?std::exp2(-4*warmth):1), (900 + 1400 * vowel)*(impact?std::exp2(-1.2f*warmth):1), 2600 + 1500 * vowel};
         std::array<float, 3> weights{};
         float sum = 0;
         for (std::size_t b = 0; b < 3; ++b)
@@ -88,11 +90,11 @@ public:
                 if (std::abs(reference - DnaSpectrum::centres[i]) <
                     std::abs(reference - DnaSpectrum::centres[nearest]))
                     nearest = i;
-            weights[b] = std::exp(contrast * (shape.bands[nearest] - .45f) * 2.6f) *
+            weights[b] = std::exp(contrast * (shape.bands[nearest] - .45f) * (impact?4.5f:2.6f)) *
                          (1 + contrast * .5f * shape.persistence[b]);
             sum += weights[b];
         }
-        std::array<float, 12> goal{};
+        std::array<float, 13> goal{};
         for (std::size_t b = 0; b < 3; ++b)
         {
             const float hz = std::clamp(
@@ -102,12 +104,13 @@ public:
             goal[b] = std::tan(3.14159265359f * hz / float(sampleRate));
             const float referenceQ =
                 shape.resonance[b] * (.5f + .5f * shape.persistence[b]) * (1 - .65f * shape.features[0]);
-            const float q = 2.2f + (referenceQ - 2.2f) * contrast;
-            goal[3 + b] = 1 / std::clamp(q, 1.5f, 5.5f);
+            const float q = 2.2f + ((impact?std::clamp(referenceQ*1.4f+1.5f*shape.persistence[b],1.5f,6.5f):referenceQ) - 2.2f) * contrast;
+            goal[3 + b] = 1 / std::clamp(q, 1.5f, impact?6.5f:5.5f);
             goal[6 + b] = weights[b] / sum;
         }
         goal[9] = std::clamp(amount + .7f * contrast, 0.f, 1.f);
-        goal[10] = std::clamp(warmth, 0.f, .6f);
+        goal[10] = std::clamp(warmth, 0.f, .6f)*(impact?1-.6f*contrast:1);
+        goal[12] = impact?contrast:0;
         goal[11] = 1 - std::exp(-6.28318530718f * (2200 + 2200 * (1 - warmth)) / float(sampleRate));
         modernGoal = goal;
         if (!modernPrimed)
@@ -135,13 +138,13 @@ public:
                 s[1] = 2 * v2 - s[1];
                 bands += k * v1 * modern[6 + b];
             }
-            float coloured = x + 1.35f * modern[9] * bands;
+            float coloured = modern[12]>0 ? x*(1-.6f*modern[12])+(1.35f*modern[9]+1.8f*modern[12])*bands : x + 1.35f * modern[9] * bands;
             warmState[std::size_t(ch)] += modern[11] * (coloured - warmState[std::size_t(ch)]);
             frame[ch] = coloured + modern[10] * (warmState[std::size_t(ch)] - coloured);
         }
     }
 private:
-    std::array<float,12> modern{},modernStep{},modernGoal{};std::array<float,26> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false;
+    std::array<float,13> modern{},modernStep{},modernGoal{};std::array<float,27> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false;
     double sampleRate=48000;float coefficient=.01f;bool primed=false;
     std::array<float,3> frequencies {};
     std::array<std::array<std::array<float,2>,3>,2> states {};

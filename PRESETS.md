@@ -25,7 +25,7 @@ Export writes the stored user preset. Save current edits first if you want those
 `.wubpreset` is UTF-8 XML, capped at 2 MiB:
 
 ```xml
-<WubrotPreset formatVersion="3" plugin="WUBROT" name="Metallic Yoi">
+<WubrotPreset formatVersion="4" plugin="WUBROT" name="Metallic Yoi">
   <WubrotState ...analysis and metadata properties...>
     <PARAM id="x" value="0.3"/>
     <!-- all 12 existing sound parameters -->
@@ -33,7 +33,7 @@ Export writes the stored user preset. Save current edits first if you want those
 </WubrotPreset>
 ```
 
-The inner state uses the same APVTS `WubrotState` structure as DAW projects. Required parameters retain their existing IDs and order: `x`, `y`, `mutate`, `drive`, `mode`, `mix`, `output`, `protect`, `enabled`, `regionStart`, `regionEnd`, `dnaSpeed`. All are validated against their ranges; discrete values must be integral. The optional `xyMapping` property selects the sound model: missing/1 retains the original mapping and processing exactly; 2 retains the v0.2.37 centred sound; 3 adds signed regions and temporal spectral DNA. New sounds use outer `formatVersion="3"`, so older plugins reject them rather than silently interpreting their XY differently. This build reads versions 1, 2 and 3. Saving a legacy sound retains its original model/container; renaming/exporting preserves its model. Mapping version participates in the dirty-state signature without adding an automation parameter. Informational `crushBitDepth`, `crushSampleRate` and `referenceSampleRate` properties document the reduction at the saving host's sample rate; they do not add parameters or change the processing model.
+The inner state uses the same APVTS `WubrotState` structure as DAW projects. Required parameters retain their existing IDs and order: `x`, `y`, `mutate`, `drive`, `mode`, `mix`, `output`, `protect`, `enabled`, `regionStart`, `regionEnd`, `dnaSpeed`. All are validated against their ranges; discrete values must be integral. The optional `xyMapping` property selects the sound model: missing/1 retains the original mapping and processing exactly; 2 retains the v0.2.37 centred sound; 3 retains the v0.2.41 signed regions and temporal spectral DNA; 4 corrects excitation, folding and resonance balance without changing coordinates or analysis data. New sounds use outer `formatVersion="4"`, so older plugins reject them rather than silently interpreting their XY differently. This build reads versions 1, 2, 3 and 4. Saving a legacy sound retains its original model/container; renaming/exporting preserves its model. Mapping version participates in the dirty-state signature without adding an automation parameter. Informational `crushBitDepth`, `crushSampleRate` and `referenceSampleRate` properties document the reduction at the saving host's sample rate; they do not add parameters or change the processing model.
 
 The versioned outer container rejects unsupported future versions rather than guessing. XML document types/entities, missing/duplicate parameters, invalid values and corrupt analysis arrays are rejected before applying a state. There is no code, external file dependency, or original audio in the portable format. The `sourceWav` property is explicitly forbidden.
 

@@ -56,33 +56,18 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
-      - name: Build pre-change processor for callback comparison
-        shell: pwsh
-        run: |
-          python tools/prepare_benchmark_baseline.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $PSNativeCommandUseErrorActionPreference = $false
-          cmake -S benchmark-baseline-source -B benchmark-baseline-build -A x64 "-DFETCHCONTENT_SOURCE_DIR_JUCE=${{ github.workspace }}/build/_deps/juce-src" "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${{ github.workspace }}/webview2" "-DWUBROT_VERSION=0.2.37" *> baseline-configure.log
-          $task_status = $LASTEXITCODE
-          Get-Content baseline-configure.log
-          if ($task_status -ne 0) { python tools/ci_error_annotation.py baseline-configure.log; exit $task_status }
-          cmake --build benchmark-baseline-build --config Release --target WubrotCallbackBenchmark --parallel 2 *> baseline-build.log
-          $task_status = $LASTEXITCODE
-          Get-Content baseline-build.log
-          if ($task_status -ne 0) { python tools/ci_error_annotation.py baseline-build.log }
-          exit $task_status
       - name: Measure actual callback cost and editor overhead separately
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/Performance | Out-Null
           $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
-          & benchmark-baseline-build/Release/WubrotCallbackBenchmark.exe build/Performance v037-closed
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v041-closed closed 3
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v3-closed
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance revised-closed closed 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & benchmark-baseline-build/Release/WubrotCallbackBenchmark.exe build/Performance v037-open ui
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v041-open ui 3
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v3-open ui
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance revised-open ui 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/compare_callback_benchmarks.py build/Performance
           exit $LASTEXITCODE

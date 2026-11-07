@@ -179,7 +179,7 @@ int main()
         const auto before = render(p);
         require(p.importPreset(corrupt, "Bad", false).failed(), "malformed preset accepted");
         require(render(p) == before, "rejected import modified audio");
-        auto version = text.replace("formatVersion=\"3\"", "formatVersion=\"999\"");
+        auto version = text.replace("formatVersion=\"4\"", "formatVersion=\"999\"");
         corrupt.replaceWithText(version);
         require(PresetLibrary::read(corrupt, state, name).failed(), "future version accepted");
         require(PresetLibrary::read(file, state, name).wasOk(), "valid file not readable");

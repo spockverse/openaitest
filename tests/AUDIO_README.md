@@ -1,3 +1,24 @@
+# Current control-impact correction auditions
+
+All distributed audio is synthetic. No user reference recordings or derivatives.
+
+Start with `impact-dry-synthetic-matched.wav`. `impact-model2-drive0/50/100-matched.wav`
+uses the pre-regression v0.2.37 processing; `impact-model3-*` uses the retained
+v0.2.41 path; `impact-model4-*` uses the correction. Same bass, XY and parameter
+settings throughout. DRIVE 0/50/100 labels correspond to the unchanged 0/18/36 dB
+host parameter range. All matched WAVs use whole-file RMS 0.12, with no limiter.
+
+Compare the model3/model4 metallic, vowel and percussion files at MUTATE 50 and
+100. The corresponding `drive0` WAV is also the MUTATE-0/no-DNA baseline; those
+identical files are not duplicated for each reference. `impact-quadrant0/1/2/3`
+compares top-left/top-right/bottom-left/bottom-right at the same radius, DRIVE 0.
+
+`Control-impact.md` reports harmonic ratio, absolute generated harmonic energy,
+output level/peaks, spectral distribution and profile-dependent changes. These
+measure control effectiveness, not musical quality. Listening and real FL Studio
+validation remain necessary. Legacy regression tests still run but do not regenerate
+historical audio unless CMake WUBROT_LEGACY_AUDITIONS is explicitly enabled.
+
 # Current signed-region and temporal-DNA audition
 
 All audio is synthetic, including the reference profiles. No user recordings or derivatives are included.

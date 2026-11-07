@@ -25,7 +25,7 @@ private:
     }
     void finish(const juce::String& error={})
     {
-        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("latest",lastMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
+        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("latest",lastMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
         stopTimer();if(error.isEmpty()){std::cout<<"PASS: actual processBlock -> native timer -> JUCE WebView2 -> live shader/canvas; low/mid hits, silence, power and unchanged XY\n";result=0;}else std::cerr<<"FAIL: "<<error<<" last evaluation: "<<lastError<<" native ready="<<editor.visualBridgeReady<<" forwarded="<<editor.lastAudioLevel<<" seq="<<editor.lastAudioSequence<<" ticks="<<editor.uiTicks<<" frontend="<<juce::JSON::toString(lastMetrics,true)<<'\n';
         juce::MessageManager::getInstance()->stopDispatchLoop();
     }
@@ -54,6 +54,25 @@ private:
             })())JS",[this,now](juce::var v){if(static_cast<bool>(v["ready"])){std::cout<<"Real frontend ready "<<juce::JSON::toString(v,true)<<'\n';installed=true;stageStart=now;}});
             return;
         }
+        // Exercise the real, unchanged HTML input -> native bridge -> APVTS route.
+        if(driveBridgeStage<4)
+        {
+            constexpr float values[]{0,18,36,0};
+            const float expected=values[driveBridgeStage];
+            if(!driveBridgeSent)
+            {
+                evaluate("(()=>{const e=document.getElementById('drive');nativeEvent('gesture',{id:'drive',start:true});e.value="+juce::String(expected)+";e.dispatchEvent(new Event('input',{bubbles:true}));nativeEvent('gesture',{id:'drive',start:false});return JSON.stringify({ok:true});})()",[this](juce::var){driveBridgeSent=true;});
+                return;
+            }
+            const float actual=processor.parameters.getRawParameterValue("drive")->load();
+            auto* parameter=processor.parameters.getParameter("drive");
+            if(std::abs(actual-expected)<.0001f&&std::abs(parameter->getValue()-expected/36)<.0001f)
+            {
+                driveBridgeValues.add(actual);++driveBridgeStage;driveBridgeSent=false;stageStart=now;
+                if(driveBridgeStage==4)std::cout<<"PASS actual WebView DRIVE -> APVTS raw 0/18/36/0, normalized 0/0.5/1/0\n";
+            }
+            return;
+        }
         const double durations[]{900,1900,650,1900,650,900,1300};
         evaluate(R"JS(JSON.stringify({...window.__visualProbe,value:audioVisual.value,target:audioVisual.target,off:!engineIsOn(),x:px,y:py,frameRequest,receivedAge:performance.now()-audioVisual.received}))JS",[this,now,duration=durations[stage]](juce::var metrics){
             lastMetrics=metrics;
@@ -72,7 +91,7 @@ private:
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
-    bool pending=false,installed=false;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
+    bool pending=false,installed=false,driveBridgeSent=false;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
     std::shared_ptr<int> life=std::make_shared<int>(0);
     juce::File reportFile;juce::Array<juce::var> records;
 };

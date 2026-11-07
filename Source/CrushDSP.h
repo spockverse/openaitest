@@ -39,6 +39,7 @@ public:
     void processFrame(float* frame,int channels,const Parameters& target,const DnaProfile* dna=nullptr)noexcept
     {
         const bool modern=target.processingVersion>=3;
+        const bool impact=target.processingVersion>=4;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -76,7 +77,7 @@ public:
         dnaPresence+=modulationCoefficient*((loaded?1.0f:0.0f)-dnaPresence);
         const float influence=current.mutate*(modern&&!loaded?0:dnaPresence);
         const bool updateControl=modern&&controlRemaining<=0;
-        if(updateControl){modernShape=loaded&&influence>0?dna->spectralAt(float(patternPosition)):DnaTemporalFrame{};modernCharacter=SignedCharacter::at(current.signedX,current.signedY);}
+        if(updateControl){modernShape=loaded&&influence>0?dna->spectralAt(float(patternPosition)):DnaTemporalFrame{};modernCharacter=SignedCharacter::at(current.signedX,current.signedY,impact?4.f:2.f);}
         if(!modern){
         if(loaded&&dna->spectrum.valid)
         {
@@ -94,6 +95,8 @@ public:
         const float harmonic=modern?modernShape.features[1]:signature?signature->features[1]:.5f;
         const float even=modern?modernShape.features[2]:signature?signature->features[2]:.5f;
         const float crest=modern?modernShape.features[3]:signature?signature->features[3]:.3f;
+        const float driveUnit=std::clamp(current.drive/36.f,0.f,1.f);
+        const float drivePush=driveUnit*(.35f+.65f*driveUnit);
         const float originalDrive=std::clamp(current.drive/24,0.0f,1.0f);
         const float drive=target.centered?std::min(1.0f,originalDrive+.32f*current.activity):originalDrive;
         const float crush=(16-current.bits)/14;
@@ -109,24 +112,24 @@ public:
         const float edge=drive*(.2f+.8f*crush+2.5f*influence*rough);
         if(updateControl)
         {
-            const float spectralContrast=influence*influence*(.35f+.65f*influence);
-            const float modernGain=1+current.drive*.12f+current.activity*(.7f+.8f*modernCharacter.shaper)+spectralContrast*(.8f*harmonic+.6f*rough);
-            const float modernAsym=influence*(2.2f*(even-.5f)+.4f*(modulation-.5f));
-            const float modernEdge=std::clamp(.1f+modernCharacter.shaper*.65f+spectralContrast*(.4f+.8f*rough),0.f,1.6f);
-            const std::array<float,5> controlGoal{modernGain,modernAsym,modernEdge,std::pow(10.f,current.output/20),4+spectralContrast*(6+10*rough+8*harmonic)};
+            const float spectralContrast=impact?influence*(.55f+.45f*influence):influence*influence*(.35f+.65f*influence);
+            const float modernGain=impact?1+current.activity*(1+2.5f*modernCharacter.shaper)+14*drivePush+spectralContrast*(1+1.5f*harmonic+rough):1+current.drive*.12f+current.activity*(.7f+.8f*modernCharacter.shaper)+spectralContrast*(.8f*harmonic+.6f*rough);
+            const float modernAsym=(impact?current.activity*(.5f+2*modernCharacter.warmth-.6f*modernCharacter.shaper):0)+influence*(2.2f*(even-.5f)+.4f*(modulation-.5f));
+            const float modernEdge=impact?std::clamp(current.activity*(.25f+2.2f*modernCharacter.shaper)+2.5f*drivePush+spectralContrast*(1+1.5f*rough),0.f,6.f):std::clamp(.1f+modernCharacter.shaper*.65f+spectralContrast*(.4f+.8f*rough),0.f,1.6f);
+            const std::array<float,6> controlGoal{modernGain,modernAsym,modernEdge,std::pow(10.f,current.output/20),4+(impact?6*modernCharacter.shaper+4*drivePush:0)+spectralContrast*(6+10*rough+8*harmonic),impact?.20f/std::sqrt(std::sqrt(modernGain)):0};
             if(!controlPrimed){modernControl=controlGoal;controlPrimed=true;}
-            for(std::size_t i=0;i<5;++i)modernStep[i]=(controlGoal[i]-modernControl[i])/float(controlInterval);
+            for(std::size_t i=0;i<modernControl.size();++i)modernStep[i]=(controlGoal[i]-modernControl[i])/float(controlInterval);
             crusher.setModern(current.bits,current.rate,modernCharacter.antiAlias,modernCharacter.rebuild,controlInterval);
-            tonal.setModern(vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval);
+            tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact);
             controlRemaining=controlInterval;
         }
-        if(modern){for(std::size_t i=0;i<5;++i)modernControl[i]+=modernStep[i];--controlRemaining;}
+        if(modern){for(std::size_t i=0;i<modernControl.size();++i)modernControl[i]+=modernStep[i];--controlRemaining;}
         const float output=modern?modernControl[3]:std::pow(10.0f,current.output/20);
         const std::array<float,2> dry {frame[0],channels==2?frame[1]:0};
         const int tail=static_cast<int>(sampleRate*.08);
         if(peak<=0)silentFrames=std::min(silentFrames+1,tail+1);else silentFrames=0;
         if(silentFrames==tail)clearAudio();
-        const float subProtection=modern?current.protect*(1-.65f*influence*influence):current.protect;
+        const float subProtection=impact?current.protect*std::max(.1f,1-.4f*current.activity-.45f*influence-.2f*drivePush):modern?current.protect*(1-.65f*influence*influence):current.protect;
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
             const auto c=static_cast<std::size_t>(ch);
@@ -147,7 +150,7 @@ public:
             const float source=frame[ch];
             const float shaped=modern?source:nonlinear.tick(source,ch,gain,asymmetry,edge);
             const float blend=std::min(1.0f,current.drive/6+(target.centered?.55f*current.activity:0));
-            const float driven=modern?nonlinear.tickResidual(source,ch,modernControl[0],modernControl[1],modernControl[2],std::clamp(.2f+.65f*current.activity+originalDrive*.25f,0.f,1.f),modernControl[4]):source+blend*(shaped-source);
+            const float driven=modern?nonlinear.tickResidual(source,ch,modernControl[0],modernControl[1],modernControl[2],impact?std::clamp(.45f+.55f*current.activity,0.f,1.f):std::clamp(.2f+.65f*current.activity+originalDrive*.25f,0.f,1.f),modernControl[4],modernControl[5]):source+blend*(shaped-source);
             const float dc=driven-dcInput[c]+dcCoefficient*dcOutput[c];dcInput[c]=driven;dcOutput[c]=dc;
             frame[ch]=dc;
         }
@@ -160,7 +163,9 @@ public:
             const float coloured=frame[ch];
             const float release=std::clamp(static_cast<float>(tail-silentFrames)/static_cast<float>(sampleRate*.02),0.0f,1.0f);
             const float tailGain=release*release*(3-2*release);
-            const float headroom=modern?1/(1+.35f*current.activity+.25f*originalDrive):target.centered?1/(1+1.8f*drive+.25f*current.activity):1;
+            // Extra crest headroom is limited to the coarsest quantizer settings.
+            const float coarseHeadroom=impact?std::max(0.f,(4-current.bits)*.5f):0;
+            const float headroom=impact?1/(1+.28f*current.activity+.1f*drivePush+.25f*influence+.3f*coarseHeadroom*coarseHeadroom):modern?1/(1+.35f*current.activity+.25f*originalDrive):target.centered?1/(1+1.8f*drive+.25f*current.activity):1;
             const float wet=(coloured+subProtection*low[c])*tailGain*headroom;
             // A short continuous centre transition removes quantizer/DC/filter residuals
             // at exactly neutral, without a dry dead zone. Axis mapping still
@@ -183,7 +188,7 @@ private:
     int refractory=0,silentFrames=0,activityHold=0;bool primed=false,retriggerArmed=false;
     DnaSpectrum smoothedSpectrum;float dnaPresence=0;
     int controlInterval=192,controlRemaining=0;bool controlPrimed=false;
-    DnaTemporalFrame modernShape;SignedCharacter modernCharacter;std::array<float,5> modernControl{},modernStep{};
+    DnaTemporalFrame modernShape;SignedCharacter modernCharacter;std::array<float,6> modernControl{},modernStep{};
     Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;
     std::array<float,2> low{},dcInput{},dcOutput{},colour{};
 };

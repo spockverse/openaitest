@@ -40,7 +40,7 @@ public:
     // Oversample only the nonlinear residual. The original excitation is not
     // low-passed or cross-mixed against its delayed, filtered copy.
     float tickResidual(float x, int channel, float gain, float asymmetry, float edge, float amount,
-                       float cycles = 4) noexcept
+                       float cycles = 4, float harmonicScale = 0) noexcept
     {
         auto &bank = filters[std::size_t(channel)];
         float residual = 0;
@@ -57,7 +57,9 @@ public:
             // a delayed broadband gain copy. Keep only nonlinear harmonic change.
             const float fold=std::sin(cycles*std::atan(input))-phaseInput/(1+phaseInput*phaseInput);
             const float shape=bent/std::sqrt(1+bent*bent)+edge*.16f*fold;
-            float difference=shape*inverseGain-u;
+            // Model 4 decouples generated harmonics from input-gain compensation.
+            // Both residual terms still have zero small-signal slope.
+            float difference=harmonicScale>0 ? bent/std::sqrt(1+bent*bent)*inverseGain-u+edge*harmonicScale*fold : shape*inverseGain-u;
             residual = bank[3].tick(bank[2].tick(difference));
         }
         previous[std::size_t(channel)] = x;

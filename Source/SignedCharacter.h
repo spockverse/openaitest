@@ -8,10 +8,10 @@
 struct SignedCharacter
 {
     float bitsOffset = 0, logRate = 0, shaper = 0, antiAlias = 0, rebuild = 0, warmth = 0;
-    static SignedCharacter at(float x, float y) noexcept
+    static SignedCharacter at(float x, float y, float slope=2) noexcept
     {
-        x = std::tanh(2 * std::clamp(x, -1.f, 1.f));
-        y = std::tanh(2 * std::clamp(y, -1.f, 1.f));
+        x = std::tanh(slope * std::clamp(x, -1.f, 1.f));
+        y = std::tanh(slope * std::clamp(y, -1.f, 1.f));
         const std::array<float, 4> w{(1 - x) * (1 - y) * .25f, (1 + x) * (1 - y) * .25f,
                                      (1 - x) * (1 + y) * .25f, (1 + x) * (1 + y) * .25f};
         // TL crunch, TR metallic, BL warmer grit, BR robotic sample-and-hold.

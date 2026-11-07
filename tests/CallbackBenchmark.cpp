@@ -105,14 +105,21 @@ int main(int argc, char **argv)
         std::filesystem::create_directories(dir);
         const juce::String label = argc > 2 ? argv[2] : "current";
         const bool ui = argc > 3 && std::string(argv[3]) == "ui";
+        const int model=argc>4?std::stoi(argv[4]):4;
+        if(model!=3&&model!=4)throw std::runtime_error("Benchmark model must be 3 or 4");
         std::ofstream report(dir / (label.toStdString() + "-callback.json"));
         report << "{\"label\":\"" << label << "\",\"cpu\":\"" << juce::SystemStats::getCpuVendor() << " "
                << juce::SystemStats::getCpuModel() << "\",\"logicalCpus\":" << juce::SystemStats::getNumCpus()
                << ",\"os\":\"" << juce::SystemStats::getOperatingSystemName()
-               << "\",\"editorOpen\":" << (ui ? "true" : "false") << ",\"cases\":[";
+               << "\",\"processingModel\":" << model << ",\"editorOpen\":" << (ui ? "true" : "false") << ",\"cases\":[";
         bool first = true;
         double worstPeak = 0;
         WubrotProcessor p;
+        juce::MemoryBlock state;p.getStateInformation(state);
+        auto xml=juce::AudioProcessor::getXmlFromBinary(state.getData(),int(state.getSize()));
+        xml->setAttribute("xyMapping",model);juce::AudioProcessor::copyXmlToBinary(*xml,state);
+        p.setStateInformation(state.getData(),int(state.getSize()));
+        if(int(p.uiState()["xyMapping"])!=model)throw std::runtime_error("Requested benchmark model was not applied");
         p.setParameterValue("x", .55f);
         p.setParameterValue("y", -.45f);
         p.setParameterValue("drive", 12);
