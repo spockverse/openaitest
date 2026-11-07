@@ -1,3 +1,9 @@
+# Stationary Crush Field targeting overlay
+
+- Restored four concentric circles, horizontal/vertical crosshairs and endpoint dots to fixed, centered 640×640 design coordinates. The same cached thin translucent overlay is composited above the WebGL or Canvas material and below the orb. No XY, physics, time or audio values enter its geometry; no additional render loop or UI element.
+- Removed shader grid projection, orb-following circle centers, guide displacement and fallback guide warping. The approved jelly material math, idle animation, XY tracking, bounded audio-reactive movement/reflections, processor telemetry, DSP, parameters and state remain unchanged.
+- Replaced deformation-specific browser tests with stationary-overlay checks at all twelve XY poses, idle/audio states and all three editor sizes, including Canvas fallback, actual pointer dragging and OFF freezing. Material pixels are compared exactly against the frozen v0.2.35 renderer with its old grid disabled. Windows native/VST3/WebView2 tests remain in CI; FL Studio-specific visual verification remains manual. No public release.
+
 # Audio visibility and bounded guide correction
 
 - Reproduced compressed-note detection failure: after the initial impact, repeated clipped bass notes remained near the 0.10 held response. Added per-band 18 ms positive-rise detection alongside the existing background/novelty detector; repeated low/body/mid attacks now produce roughly 0.56–0.81 peaks in the synthetic regression, while steady 35–1200 Hz tones remain gentle and treble does not trigger.
