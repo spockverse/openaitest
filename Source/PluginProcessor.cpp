@@ -35,7 +35,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
     p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID {"dnaSpeed",1},"DNA Speed",juce::StringArray{"0.25x","0.5x","1x","2x","4x"},2));
     return p;
 }
-void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
+void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); visualAnalyser.prepare(rate); visualReadout.clear(); lastVisualBlockMs=juce::Time::getMillisecondCounterHiRes();lastVisualBlockDurationMs=0; expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
 bool WubrotProcessor::isBusesLayoutSupported(const BusesLayout& b) const
 {
     const auto out = b.getMainOutputChannelSet();
@@ -44,6 +44,12 @@ bool WubrotProcessor::isBusesLayoutSupported(const BusesLayout& b) const
 void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    // Freshness only, not transport/BPM sync: discard a paused callback's old
+    // visual envelope before new audio arrives. Never reset the sound engine.
+    const auto visualNow=juce::Time::getMillisecondCounterHiRes();
+    if(lastVisualBlockMs>=0&&visualNow-lastVisualBlockMs>std::max(120.0,lastVisualBlockDurationMs*3))
+    { visualAnalyser.reset(); visualReadout.clear(); }
+    lastVisualBlockMs=visualNow;lastVisualBlockDurationMs=buffer.getNumSamples()*1000.0/runningRate.load();
     if(resetProfileClock.exchange(false))dsp.resetModulation();
     float x = values[0]->load(), y = values[1]->load();
     const float length = std::hypot(x, y); if (length > 1) { x /= length; y /= length; }
@@ -67,6 +73,7 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     p.inputActive=buffer.getNumSamples()>0&&buffer.getMagnitude(0,buffer.getNumSamples())>1.0e-5f;
     p.patternEnabled=!transportKnown||playing;lastTransportPlaying=playing;
     auto profile = profiles.read();
+    if (!p.enabled) { visualAnalyser.reset(); visualReadout.clear(); }
     auto event = midi.cbegin();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
@@ -78,10 +85,12 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         }
         float frame[2] {};
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch) frame[ch] = buffer.getSample(ch, i);
+        if (p.enabled) visualAnalyser.observe(frame, buffer.getNumChannels());
         dsp.processFrame(frame, buffer.getNumChannels(), p, profile.get());
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch) buffer.setSample(ch, i, frame[ch]);
     }
     patternPosition.store(dsp.getPatternPosition());
+    visualReadout.publish(visualAnalyser.level(), visualAnalyser.takePeak());
     midi.clear();
 }
 void WubrotProcessor::setParameterValue(const juce::String& id, float value)

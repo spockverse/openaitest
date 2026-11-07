@@ -119,11 +119,54 @@ static void checkLoadingRoutes()
     juce::MemoryBlock mp3State;p.getStateInformation(mp3State);WubrotProcessor restored;restored.setStateInformation(mp3State.getData(),static_cast<int>(mp3State.getSize()));waitForSample(restored);require(static_cast<bool>(restored.uiState()["editable"]),"MP3 source did not reopen for editing");require(render(restored)==render(p),"MP3 profile state recall changed audio");
     p.loadSampleFile(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("missing-wubrot.wav"));require(p.uiState()["status"].toString().containsIgnoreCase("access"),"missing path has no diagnostic");
 }
+static void checkVisualObserver()
+{
+    for(const double rate:{44100.0,48000.0,96000.0})for(const int channels:{1,2})for(const int blockSize:{64,512,4096})
+    {
+        WubrotProcessor processor;processor.clearSample();
+        auto layout=processor.getBusesLayout();layout.inputBuses.set(0,channels==1?juce::AudioChannelSet::mono():juce::AudioChannelSet::stereo());layout.outputBuses=layout.inputBuses;
+        require(processor.setBusesLayout(layout),"Observer test layout failed");
+        processor.setParameterValue("x",-.25f);processor.setParameterValue("y",.4f);processor.setParameterValue("drive",13);processor.setParameterValue("mutate",0);
+        processor.prepareToPlay(rate,blockSize);CrushDSP reference;reference.prepare(rate);
+        CrushDSP::Parameters target;target.bits=16-(-.25f+1)*7;target.rate=static_cast<float>(500*std::pow(rate/500,(.4f+1)*.5));target.drive=13;target.mutate=0;target.mix=1;target.output=-6;target.protect=1;target.speed=1;target.mode=0;
+        float observedPeak=0;
+        for(int block=0;block<32;++block)
+        {
+            target.enabled=block<10||block>=16;processor.setParameterValue("enabled",target.enabled?1.0f:0.0f);
+            juce::AudioBuffer<float> audio(channels,blockSize),expected(channels,blockSize);juce::MidiBuffer midi;
+            for(int i=0;i<blockSize;++i)
+            {
+                const double t=(block*blockSize+i)/rate;
+                const float bass=.6f*static_cast<float>(std::sin(t*6.283185307179586*65)*std::exp(-std::fmod(t,.25)/.05));
+                const float v=block>24?0:bass+.04f*static_cast<float>(std::sin(t*6.283185307179586*1300));
+                for(int ch=0;ch<channels;++ch)audio.setSample(ch,i,ch==0?v:-v);
+            }
+            expected.makeCopyOf(audio);target.inputActive=audio.getMagnitude(0,blockSize)>1e-5f;
+            for(int i=0;i<blockSize;++i){float frame[2]{};for(int ch=0;ch<channels;++ch)frame[ch]=expected.getSample(ch,i);reference.processFrame(frame,channels,target);for(int ch=0;ch<channels;++ch)expected.setSample(ch,i,frame[ch]);}
+            const auto serial=processor.audioVisualSequence();processor.processBlock(audio,midi);
+            require(processor.audioVisualSequence()!=serial,"Input observer did not publish telemetry");
+            const auto visual=processor.consumeAudioVisualLevel();
+            require(std::isfinite(visual)&&visual>=0&&visual<=1,"Invalid processor visual telemetry");
+            if(!target.enabled)require(visual==0,"Bypass leaked a reactive flash");else observedPeak=std::max(observedPeak,visual);
+            for(int ch=0;ch<channels;++ch)require(std::memcmp(audio.getReadPointer(ch),expected.getReadPointer(ch),sizeof(float)*static_cast<std::size_t>(blockSize))==0,"Read-only observer changed processed audio");
+        }
+        require(observedPeak>.5f,"Actual processor input did not reach visual telemetry");
+        if(rate==44100&&channels==1&&blockSize==64)
+        {
+            juce::Thread::sleep(150);juce::AudioBuffer<float> silent(1,64);silent.clear();juce::MidiBuffer events;
+            processor.processBlock(silent,events);require(processor.consumeAudioVisualLevel()<=0,"Host callback pause replayed an old visual impact during silence");
+        }
+        processor.reset();require(processor.consumeAudioVisualLevel()==0,"Reset retained an old impact");
+        require(processor.getLatencySamples()==0,"Visual observer introduced audio latency");
+    }
+    std::cout<<"Visual observer: exact approved-DSP output across rates/buffers/mono/anti-phase stereo, bypass, telemetry and reset passed\n";
+}
 int main()
 {
     juce::ScopedJuceInitialiser_GUI initialise;
     try
     {
+        checkVisualObserver();
         checkHostClock();
         checkLoadingRoutes();
         checkDnaRouting();

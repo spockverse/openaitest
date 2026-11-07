@@ -30,6 +30,9 @@ private:
     juce::String lastState;
     int lastCatalogueRevision=-1;
     int uiTicks=0;double lastPlayhead=-1;
+    bool audioWasVisible=false;
+    std::uint32_t lastAudioSequence=0;
+    float lastAudioLevel=-1;
     juce::Label error;
     std::unique_ptr<juce::FileChooser> chooser;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WubrotEditor)

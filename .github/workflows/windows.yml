@@ -62,7 +62,8 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           New-Item -ItemType Directory -Force build/EditorScreenshots | Out-Null
           $env:WUBROT_SCREENSHOTS = Join-Path $PWD 'build/EditorScreenshots'
-          foreach ($task_test in @('PresetBrowser', 'PowerShutdown', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
+          $env:WUBROT_VISUAL_TRACE = Join-Path $PWD 'build/VisualTelemetry.json'
+          foreach ($task_test in @('PresetBrowser', 'PowerShutdown', 'AudioReactiveField', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
             node "tests/$task_test.cjs" *> browser-test-output.log
             $task_browser_status = $LASTEXITCODE
             Get-Content browser-test-output.log

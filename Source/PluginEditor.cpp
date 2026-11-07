@@ -105,10 +105,26 @@ void WubrotEditor::handleEvent(const juce::var& event)
 }
 void WubrotEditor::timerCallback()
 {
-    if (!browser || !isShowing()) return;
+    if (!browser || !isShowing()) { audioWasVisible=false; return; }
+    if (!audioWasVisible) { processor.consumeAudioVisualLevel(); lastAudioSequence=processor.audioVisualSequence(); lastAudioLevel=-1; audioWasVisible=true; }
     applyEditorSize();
     const double position=processor.modulationPosition();
     if(std::abs(position-lastPlayhead)>1e-12){auto data=std::make_unique<juce::DynamicObject>();data->setProperty("position",position);browser->emitEventIfBrowserIsVisible("wubrotPlayhead",juce::var(data.release()));lastPlayhead=position;}
+    // At most 30 compact visualization packets/s, only for newly processed
+    // audio. The browser smoothly expires stale data if the host stops callbacks.
+    const auto audioSequence=processor.audioVisualSequence();
+    if (uiTicks%2==0 && audioSequence!=lastAudioSequence)
+    {
+        lastAudioSequence=audioSequence;
+        const auto intensity=processor.consumeAudioVisualLevel();
+        // Active held notes need fresh packets even at constant intensity, so
+        // the UI can distinguish sustain from an audio callback that stopped.
+        if (intensity>0 || lastAudioLevel>0 || lastAudioLevel<0)
+        {
+            auto data=std::make_unique<juce::DynamicObject>(); data->setProperty("intensity",intensity);
+            browser->emitEventIfBrowserIsVisible("wubrotAudio",juce::var(data.release()));lastAudioLevel=intensity;
+        }
+    }
     if(++uiTicks%3!=0)return;
     const auto revision=processor.presetLibraryRevision();
     if(lastCatalogueRevision!=revision){browser->emitEventIfBrowserIsVisible("wubrotPresetLibrary",processor.presetCatalogue());lastCatalogueRevision=revision;}

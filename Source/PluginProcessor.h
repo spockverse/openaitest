@@ -2,6 +2,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "CrushDSP.h"
 #include "DnaExchange.h"
+#include "AudioReactivity.h"
 #include "PresetLibrary.h"
 
 class WubrotProcessor final : public juce::AudioProcessor, private juce::Timer
@@ -11,7 +12,7 @@ public:
     ~WubrotProcessor() override;
     void prepareToPlay(double, int) override;
     void releaseResources() override {}
-    void reset() override { dsp.reset(); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
+    void reset() override { dsp.reset(); visualAnalyser.reset(); visualReadout.clear(); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
     bool isBusesLayoutSupported(const BusesLayout&) const override;
     using AudioProcessor::processBlock;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -39,6 +40,8 @@ public:
     bool isLoading() const noexcept { return loading.load(); }
     juce::var uiState();
     double modulationPosition() const noexcept { return patternPosition.load(); }
+    std::uint32_t audioVisualSequence() const noexcept { return visualReadout.sequence(); }
+    float consumeAudioVisualLevel() noexcept { const auto v=visualReadout.consume(); return values[8]->load() >= .5f ? v : 0; }
     std::atomic<int> editorSize { 1 };
     bool loadFactoryPreset(int,juce::String* error=nullptr);
     juce::Result saveUserPreset(const juce::String&,bool overwrite=false);
@@ -88,6 +91,9 @@ private:
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
     CrushDSP dsp;
+    AudioReactivity visualAnalyser;
+    AudioReactivityMailbox visualReadout;
+    double lastVisualBlockMs=-1, lastVisualBlockDurationMs=0;
     DnaExchange profiles;
     std::array<std::atomic<float>*, 12> values;
     juce::CriticalSection metadataLock; // Never used by processBlock.

@@ -200,6 +200,21 @@ class GelPhysics {
  }
 }
 </script>
+<script id="audio-reactive-visual">
+class AudioReactiveVisual {
+ constructor(){this.reset();}
+ reset(){this.value=0;this.target=0;this.received=-Infinity;}
+ receive(intensity,now){if(!Number.isFinite(intensity))return;this.target=Math.max(0,Math.min(1,intensity));this.received=now;}
+ advance(dt,now){
+  // Expire stopped/hidden-host telemetry; never latch a last loud callback.
+  const target=now-this.received<=120?this.target:0;
+  const tau=target>this.value?.012:.035;
+  this.value+=(target-this.value)*(1-Math.exp(-Math.max(0,Math.min(.05,dt))/tau));
+  if(target===0&&this.value<.001)this.value=0;
+  return this.value;
+ }
+}
+</script>
 <script id="gel-renderer">
 class GelRenderer {
  constructor(surface){
@@ -219,7 +234,7 @@ class GelRenderer {
    `);
    const fragment=shader(gl.FRAGMENT_SHADER,`
     precision highp float;varying vec2 uv;
-    uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;
+    uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;uniform float reactiveGain;uniform float reactiveLight;
     void main(){
      vec2 p=uv-.5;float radius=length(p);
      // A disk automorphism maps the sphere to the artwork cavity while preserving the circular rim.
@@ -240,12 +255,14 @@ class GelRenderer {
      vec2 radial=local/max(distanceToOrb,.025);
      vec2 idle=radial*(sin(phase)*.010+sin(secondary)*.0045);
      idle+=vec2(sin(p.y*19.+idleTime*.64),cos(p.x*17.-idleTime*.71))*.002;
-     vec2 tension=materialLag*exp(-distanceToOrb*distanceToOrb/.07)*1.5;
-     vec2 refraction=(normal*.055+slosh+tension+idle*idleAmount)*edge*contact;
+     float locality=exp(-distanceToOrb*distanceToOrb/.07);
+     vec2 tension=materialLag*locality*1.5;
+     vec2 refraction=(normal*.055+slosh+tension+idle*idleAmount)*edge*contact*(1.+reactiveGain*.55);
      vec2 source=.5+mapped*.435-refraction;
      vec3 colour=texture2D(artwork,clamp(source,vec2(0.),vec2(1.))).rgb;
      float light=(clamp(dot(normal,vec2(-.7,-.5)),-.5,.5)+cos(phase)*.10*idleAmount)*edge;
      colour=colour*(1.+light*.35)+vec3(.08,.025,.1)*max(0.,light);
+     colour*=1.+reactiveLight*.16*locality*edge;
      float rim=smoothstep(.455,.463,radius)*(1.-smoothstep(.464,.4671875,radius));
      colour+=vec3(.30,.10,.43)*rim*(.5+.5*sin(atan(p.y,p.x)*3.+.8));
      gl_FragColor=vec4(colour,alpha);
@@ -266,14 +283,14 @@ class GelRenderer {
    this.artwork=texture(gl.TEXTURE0);gl.uniform1i(gl.getUniformLocation(program,'artwork'),0);
    this.normals=texture(gl.TEXTURE1);gl.uniform1i(gl.getUniformLocation(program,'normals'),1);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,64,64,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(64*64*4).fill(128));
-   this.anchor=gl.getUniformLocation(program,'anchor');this.materialLag=gl.getUniformLocation(program,'materialLag');this.idleTime=gl.getUniformLocation(program,'idleTime');this.idleAmount=gl.getUniformLocation(program,'idleAmount');this.body=gl.getUniformLocation(program,'body');this.program=program;this.gl=gl;
+   this.reactiveGain=gl.getUniformLocation(program,'reactiveGain');this.reactiveLight=gl.getUniformLocation(program,'reactiveLight');this.anchor=gl.getUniformLocation(program,'anchor');this.materialLag=gl.getUniformLocation(program,'materialLag');this.idleTime=gl.getUniformLocation(program,'idleTime');this.idleAmount=gl.getUniformLocation(program,'idleAmount');this.body=gl.getUniformLocation(program,'body');this.program=program;this.gl=gl;
   }catch(error){
    // Keep the existing artwork usable if WebGL is unavailable or fails to initialise.
    this.gl=null;
   }
   surface.dataset.renderer=this.gl?'webgl':'canvas-fallback';
  }
- render(image,gel,idleTime=0,idleAmount=0){
+ render(image,gel,idleTime=0,idleAmount=0,reactiveGain=0,reactiveLight=reactiveGain){
   const gl=this.gl;if(!gl||gl.isContextLost())return false;
   if(!image.complete||!image.naturalWidth)return true;
   gl.useProgram(this.program);gl.viewport(0,0,640,640);
@@ -281,7 +298,7 @@ class GelRenderer {
   if(!this.ready){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);this.ready=true;}
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.normals);
   gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,64,64,gl.RGBA,gl.UNSIGNED_BYTE,gel.normals());
-  gl.uniform2f(this.anchor,px*.421875,py*.421875);gl.uniform2f(this.materialLag,(px-membrane.x)*.421875,(py-membrane.y)*.421875);gl.uniform1f(this.idleTime,idleTime);gl.uniform1f(this.idleAmount,idleAmount);gl.uniform2f(this.body,gel.x,gel.y);gl.drawArrays(gl.TRIANGLES,0,6);return true;
+  gl.uniform1f(this.reactiveGain,reactiveGain);gl.uniform1f(this.reactiveLight,reactiveLight);gl.uniform2f(this.anchor,px*.421875,py*.421875);gl.uniform2f(this.materialLag,(px-membrane.x)*.421875,(py-membrane.y)*.421875);gl.uniform1f(this.idleTime,idleTime);gl.uniform1f(this.idleAmount,idleAmount);gl.uniform2f(this.body,gel.x,gel.y);gl.drawArrays(gl.TRIANGLES,0,6);return true;
  }
 }
 </script>
@@ -379,7 +396,7 @@ function freezeField(){
  cancelAnimationFrame(frameRequest);frameRequest=0;last=0;
  // A single same-task redraw/copy retains the non-preserved WebGL drawing buffer.
  // No physics step, time increment or geometry reset occurs here.
- const gpu=renderer.render(jelly,gel,idleClock,motion&&liquid?1:0);
+ const gpu=renderer.render(jelly,gel,idleClock,motion&&liquid?1:0,audioVisual.value,0);
  if(gpu&&jelly.complete&&jelly.naturalWidth){const fc=frozenSurface.getContext('2d');fc.clearRect(0,0,640,640);fc.drawImage(surface,0,0);frozenSurface.style.display='block';surface.style.visibility='hidden';}
  paint(!gpu);
 }
@@ -410,6 +427,7 @@ canvas.addEventListener('pointermove',e=>{if(dragging)pointer(e);});
 const end=()=>{if(dragging){nativeEvent('gesture',{id:'x',start:false});nativeEvent('gesture',{id:'y',start:false});}dragging=false;};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
 canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=py;if(e.key==='ArrowLeft')x-=step;else if(e.key==='ArrowRight')x+=step;else if(e.key==='ArrowUp')y-=step;else if(e.key==='ArrowDown')y+=step;else if(e.key==='Home'){x=0;y=0;}else return;e.preventDefault();nativeEvent("gesture",{id:"x",start:true});nativeEvent("gesture",{id:"y",start:true});setXY(x,y);nativeEvent("gesture",{id:"x",start:false});nativeEvent("gesture",{id:"y",start:false});});
 const membrane={x:0,y:0,vx:0,vy:0};
+const audioVisual=new AudioReactiveVisual();
 const fallbackGrid=8,fallbackSectors=64,fallbackPoints=new Float32Array(9*65*2),fallbackSources=new Float32Array(9*65*2);
 let fallbackArtwork=null;
 function paintFallbackWaves(){
@@ -425,9 +443,10 @@ function paintFallbackWaves(){
   const radius=Math.hypot(dx,dy)/640,edge=Math.max(0,1-Math.pow(radius/.4671875,4));
   const lx=dx-px*270,ly=dy-py*270,r=Math.hypot(lx,ly)/640;
   const amount=motion&&liquid?(Math.sin(r*28-idleClock*3.2)*.010+Math.sin(r*19+idleClock*1.7)*.0045)*640*edge:0;
+  const gain=1+audioVisual.value*.55;
   const contact=1-Math.exp(-r*r/.0025),lag=Math.exp(-r*r/.07)*edge*contact;
-  dx+=lx/Math.max(r*640,16)*amount*contact+(membrane.x-px)*270*lag+gel.x*640*edge*contact;
-  dy+=ly/Math.max(r*640,16)*amount*contact+(membrane.y-py)*270*lag+gel.y*640*edge*contact;
+  dx+=(lx/Math.max(r*640,16)*amount*contact+(membrane.x-px)*270*lag+gel.x*640*edge*contact)*gain;
+  dy+=(ly/Math.max(r*640,16)*amount*contact+(membrane.y-py)*270*lag+gel.y*640*edge*contact)*gain;
   const i=(y*(sectors+1)+x)*2;fallbackPoints[i]=320+dx;fallbackPoints[i+1]=320+dy;
   fallbackSources[i]=320+qx*.435*628;fallbackSources[i+1]=320+qy*.435*628;
  }
@@ -453,6 +472,8 @@ function paint(fallback){
  // Graceful fallback: a smooth spring transform, never the old sliced-image animation.
  if(fallback&&jelly.complete&&jelly.naturalWidth){
   ctx.save();ctx.beginPath();ctx.arc(c,c,299,0,Math.PI*2);ctx.clip();
+  // Lift the existing material itself; no extra lighting/ripple overlay.
+  if(engineIsOn()&&audioVisual.value>0)ctx.filter=`brightness(${1+audioVisual.value*.10})`;
   paintFallbackWaves();
   ctx.restore();
  }
@@ -477,14 +498,15 @@ function tick(now){
   idleClock+=dt;
   for(let i=0;i<4;i++){const step=dt/4;membrane.vx+=((px-membrane.x)*110-membrane.vx*14)*step;membrane.vy+=((py-membrane.y)*110-membrane.vy*14)*step;membrane.x+=membrane.vx*step;membrane.y+=membrane.vy*step;}
  }else{membrane.x=px;membrane.y=py;membrane.vx=membrane.vy=0;}
- const gpu=renderer.render(jelly,gel,idleClock,motion&&liquid?1:0);
+ if(motion&&liquid)audioVisual.advance(dt,now);else audioVisual.reset();
+ const gpu=renderer.render(jelly,gel,idleClock,motion&&liquid?1:0,audioVisual.value);
  if(dirty||!gpu)paint(!gpu);
  if(jelly.complete&&jelly.naturalWidth)frozenSurface.style.display='none';
  dirty=false;
  // Keep gentle ambient refraction running alongside the separate gesture simulation.
  if(motion&&liquid)schedule(false);else last=0;
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(frameRequest);frameRequest=0;last=0;if(engineIsOn())gel.reset();}else schedule();syncButtons();});
+document.addEventListener('visibilitychange',()=>{audioVisual.reset();if(document.hidden){cancelAnimationFrame(frameRequest);frameRequest=0;last=0;if(engineIsOn())gel.reset();}else schedule();syncButtons();});
 surface.addEventListener('webglcontextlost',e=>{e.preventDefault();surface.style.visibility='hidden';schedule();});
 surface.addEventListener('webglcontextrestored',()=>{renderer=new GelRenderer(surface);if(engineIsOn()){surface.style.visibility='';schedule();}});
 function syncButtons(){$('liquid').setAttribute('aria-pressed',liquid);$('liquid').textContent=liquid?'XY / INTERACTIVE':'XY / STATIC GEL';$('motion').setAttribute('aria-pressed',motion);$('motion').textContent='ANIMATION / '+(motion?'ON':'OFF');xybox.classList.toggle('motion-paused',!motion||(document.hidden&&engineIsOn()));}
@@ -540,7 +562,7 @@ function setEnginePower(on,initial=false){
  power.setAttribute('aria-pressed',String(on));power.setAttribute('aria-label',on?'Turn engine off':'Turn engine on');power.title=on?'Engine ON — click to switch off':'Engine OFF — click to enable';
  shell.classList.toggle('power-off',!on);$('engineStatus').textContent=on?'ENGINE ACTIVE':'ENGINE OFF';$('engineStatus').classList.toggle('bypassed',!on);
  if(!changed&&!initial)return;
- if(on){surface.style.visibility='';last=0;updateRegionPosition(latestProfilePosition);schedule();}
+ if(on){audioVisual.reset();surface.style.visibility='';last=0;updateRegionPosition(latestProfilePosition);schedule();}
  else{if(initial)updateRegionPosition(latestProfilePosition,true);freezeField();}
 }
 $('enginePower').onclick=()=>{const on=$('enginePower').getAttribute('aria-pressed')!=='true';setEnginePower(on);nativeEvent('gesture',{id:'enabled',start:true});nativeEvent('parameter',{id:'enabled',value:on?1:0});nativeEvent('gesture',{id:'enabled',start:false});};
@@ -593,6 +615,7 @@ if(nativeBackend){
  const fit=()=>{const shell=document.querySelector('.shell');shell.style.width='1200px';shell.style.height='1040px';shell.style.boxSizing='border-box';shell.style.transform=`scale(${innerWidth/1200})`;};
  new ResizeObserver(fit).observe(document.querySelector('.shell'));window.addEventListener('resize',fit);fit();
  nativeBackend.addEventListener('wubrotPlayhead',data=>updateRegionPosition(data.position));
+ nativeBackend.addEventListener('wubrotAudio',data=>{if(!awaitingNativePower&&engineIsOn()&&!document.hidden&&motion&&liquid){audioVisual.receive(data.intensity,performance.now());schedule(false);}});
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;
   try{

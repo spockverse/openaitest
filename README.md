@@ -6,6 +6,8 @@ WUBROT is a sample-driven bitcrush distortion effect for existing bass audio. It
 
 The existing power button retains its click-free dry bypass. OFF also extinguishes the lighting, turns the reflective materials metallic grey and freezes decorative animation and the visual DNA playhead. Preset browsing, size selection, file loading and controls remain functional. Powering back ON restores the original lighting and resumes visualization from the current settings. This uses the existing automatable enabled state; no audio-processing or parameter-identity changes.
 
+The existing Crush Field movement also responds gently to low-end attacks in WUBROT's own incoming audio. A read-only three-band observer (30–180, 180–700 and 700–2500 Hz) prioritizes low/body energy and adds midrange articulation. It briefly boosts the existing ripple displacement and purple reflections, adding no new waves, controls, audio, or latency. Sustained bass settles to a gentle response capped at one tenth of the reactive boost rather than keeping the material maximized. Silence retains the original animation, and OFF/hidden/static-animation states suppress reactive rendering. It cannot hear other DAW tracks unless they are routed through this instance; there is no external sidechain input.
+
 ## Controls
 
 - **Crush Field X:** move right for fewer bits (16 down to 2).
