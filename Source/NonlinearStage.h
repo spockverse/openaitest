@@ -65,6 +65,22 @@ public:
         previous[std::size_t(channel)] = x;
         return x + amount * residual;
     }
+    // Source-driven, oversampled harmonic excitation. Return only the change,
+    // so its level cannot replace or low-pass the original bass foundation.
+    float tickExcitation(float x,int channel,float normalizer,float gain,float asymmetry) noexcept
+    {
+        auto& bank=filters[std::size_t(channel)];float residual=0;
+        for(int k=1;k<=4;++k){
+            float u=previous[std::size_t(channel)]+(x-previous[std::size_t(channel)])*(k*.25f);
+            u=bank[1].tick(bank[0].tick(u));
+            const float n=u*normalizer,driven=n*gain,square=driven*driven;
+            const float bent=driven+asymmetry*square/(1+square);
+            const float difference=(bent/std::sqrt(1+bent*bent)-n/std::sqrt(1+n*n))/normalizer;
+            residual=bank[3].tick(bank[2].tick(difference));
+        }
+        previous[std::size_t(channel)]=x;return residual;
+    }
+
 private:
     std::array<float,2> previous {};
     std::array<std::array<Lowpass,4>,2> filters {};

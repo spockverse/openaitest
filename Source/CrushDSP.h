@@ -24,6 +24,7 @@ public:
         attackCoefficient=coefficient(.002f);releaseCoefficient=coefficient(.025f);slowCoefficient=coefficient(.08f);
         lowCoefficient=1-std::exp(-2*pi*120/static_cast<float>(sampleRate));
         colourCoefficient=1-std::exp(-2*pi*1800/static_cast<float>(sampleRate));
+        excitationHighpass=1-std::exp(-2*pi*180/static_cast<float>(sampleRate));
         dcCoefficient=std::exp(-2*pi*12/static_cast<float>(sampleRate));detectorRelease=std::exp(-1/static_cast<float>(sampleRate*.04));
         nonlinear.prepare();crusher.prepare(sampleRate);tonal.prepare(sampleRate);sineCrush.prepare(sampleRate);controlInterval=std::max(1,int(sampleRate/250));reset();
     }
@@ -42,6 +43,7 @@ public:
         const bool modern=target.processingVersion>=3;
         const bool impact=target.processingVersion>=4;
         const bool sine=target.processingVersion>=5;
+        const bool controlFix=target.processingVersion>=7;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -127,9 +129,18 @@ public:
                 const bool advanced=target.processingVersion>=6;
                 const float dnaShift=advanced?influence*(std::clamp(modernShape.logPeaks[0]-6.5510803f,-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,driveUnit,current.protect,articulation,controlInterval,advanced,dnaShift,dnaMotion);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix?0:dnaShift,controlFix?0:dnaMotion);
                 // Keep optional DNA coloration; no generic moving resonators in the core.
-                tonal.setModern(.4f,.25f*influence,influence,modernShape,0,controlInterval,false);
+                tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0);
+                if(controlFix){
+                    const float depth=influence*(1.5f-.5f*influence);
+                    const float driveDepth=driveUnit*(.5f+1.5f*driveUnit);
+                    const std::array<float,4> goal{1/std::max(.035f,fast*1.6f),
+                        1+9*driveDepth+16*depth*(.35f+.45f*rough+.2f*(1-harmonic)),depth*1.2f*even,
+                        .35f*driveDepth+.55f*depth-.1925f*driveDepth*depth};
+                    if(!excitationPrimed){excitationControl=goal;excitationPrimed=true;}
+                    for(std::size_t i=0;i<goal.size();++i)excitationStep[i]=(goal[i]-excitationControl[i])/float(controlInterval);
+                }
             }
             controlRemaining=controlInterval;
         }
@@ -139,8 +150,26 @@ public:
         if(sine)
         {
             sineCrush.process(frame,channels);
-            tonal.processModern(frame,channels);
+            if(controlFix){
+                for(std::size_t i=0;i<excitationControl.size();++i)excitationControl[i]+=excitationStep[i];
+                if(excitationControl[3]>0){excitationActive=true;
+                for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
+                    const float extra=nonlinear.tickExcitation(dry[c],ch,excitationControl[0],excitationControl[1],excitationControl[2]);
+                    dcInput[c]+=excitationHighpass*(extra-dcInput[c]);const float high=extra-dcInput[c];
+                    dcOutput[c]+=excitationHighpass*(high-dcOutput[c]);
+                    frame[ch]+=excitationControl[3]*(high-dcOutput[c]);
+                }}else if(excitationActive){nonlinear.reset();dcInput={};dcOutput={};excitationActive=false;}
+            }
+            tonal.processModern(frame,channels,controlFix&&(influence>0||tonal.transformationActive())?sineCrush.foundation():nullptr);
             for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
+                if(controlFix&&(driveUnit>0||influence>0)){
+                    // Bound the transformed body, preserving the complementary
+                    // bass foundation. Inactive controls leave XY sample-exact.
+                    const float foundation=sineCrush.foundation()[c],body=frame[ch]-foundation;
+                    const float room=std::max(.08f,1.f-std::abs(foundation)),ratio=body/room;
+                    const float conditioned=foundation+body/std::sqrt(1+ratio*ratio);
+                    frame[ch]+=std::max(driveUnit,influence)*(conditioned-frame[ch]);
+                }
                 const float blend=std::min(1.f,current.activity*8)*current.mix;
                 const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;
                 frame[ch]=original[c]+bypassWet*(processed-original[c]);
@@ -200,13 +229,14 @@ public:
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
     }
 private:
-    void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();sineCrush.reset();}
+    void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;excitationPrimed=false;excitationActive=false;excitationControl={};excitationStep={};low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();sineCrush.reset();}
     float coefficient(float seconds)const noexcept{return 1-std::exp(-1/static_cast<float>(sampleRate*seconds));}
     void smooth(float& v,float target)const noexcept{v+=smoothCoefficient*(target-v);}
     static constexpr float pi=3.14159265359f;
     double sampleRate=48000,loopTime=0,retriggerTime=0,patternPosition=0,loopPatternTime=0,retriggerPatternTime=0;
     float smoothCoefficient=.001f,modulationCoefficient=.01f,attackCoefficient=.01f,releaseCoefficient=.001f,slowCoefficient=.001f;
     float lowCoefficient=.01f,colourCoefficient=.2f,dcCoefficient=.995f,detectorRelease=.999f;
+    float excitationHighpass=0;bool excitationPrimed=false,excitationActive=false;std::array<float,4> excitationControl{},excitationStep{};
     float detector=0,modulation=0,fast=0,slow=0,brightness=0,bypassWet=1;
     int refractory=0,silentFrames=0,activityHold=0;bool primed=false,retriggerArmed=false;
     DnaSpectrum smoothedSpectrum;float dnaPresence=0;

@@ -25,7 +25,7 @@ private:
     }
     void finish(const juce::String& error={})
     {
-        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("latest",lastMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
+        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("mutateBridge",mutateBridgeValues);report->setProperty("latest",lastMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
         stopTimer();if(error.isEmpty()){std::cout<<"PASS: actual processBlock -> native timer -> JUCE WebView2 -> live shader/canvas; low/mid hits, silence, power and unchanged XY\n";result=0;}else std::cerr<<"FAIL: "<<error<<" last evaluation: "<<lastError<<" native ready="<<editor.visualBridgeReady<<" forwarded="<<editor.lastAudioLevel<<" seq="<<editor.lastAudioSequence<<" ticks="<<editor.uiTicks<<" frontend="<<juce::JSON::toString(lastMetrics,true)<<'\n';
         juce::MessageManager::getInstance()->stopDispatchLoop();
     }
@@ -73,6 +73,19 @@ private:
             }
             return;
         }
+        if(mutateBridgeStage<5)
+        {
+            constexpr float values[]{0,25,50,75,100};const float expected=values[mutateBridgeStage];
+            if(!mutateBridgeSent){
+                evaluate("(()=>{const e=document.getElementById('mutate');nativeEvent('gesture',{id:'mutate',start:true});e.value="+juce::String(expected)+";e.dispatchEvent(new Event('input',{bubbles:true}));nativeEvent('gesture',{id:'mutate',start:false});return JSON.stringify({ok:true});})()",[this](juce::var){mutateBridgeSent=true;});return;
+            }
+            auto* parameter=processor.parameters.getParameter("mutate");
+            if(std::abs(processor.parameters.getRawParameterValue("mutate")->load()-expected)<.0001f&&std::abs(parameter->getValue()-expected/100)<.0001f){
+                mutateBridgeValues.add(expected);++mutateBridgeStage;mutateBridgeSent=false;stageStart=now;
+                if(mutateBridgeStage==5)std::cout<<"PASS actual WebView MUTATE -> APVTS raw 0/25/50/75/100 and normalized 0/.25/.5/.75/1\n";
+            }
+            return;
+        }
         const double durations[]{900,1900,650,1900,650,900,1300};
         evaluate(R"JS(JSON.stringify({...window.__visualProbe,value:audioVisual.value,target:audioVisual.target,off:!engineIsOn(),x:px,y:py,frameRequest,receivedAge:performance.now()-audioVisual.received}))JS",[this,now,duration=durations[stage]](juce::var metrics){
             lastMetrics=metrics;
@@ -91,7 +104,7 @@ private:
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
-    bool pending=false,installed=false,driveBridgeSent=false;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
+    bool pending=false,installed=false,driveBridgeSent=false,mutateBridgeSent=false;int mutateBridgeStage=0;juce::Array<juce::var> mutateBridgeValues;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
     std::shared_ptr<int> life=std::make_shared<int>(0);
     juce::File reportFile;juce::Array<juce::var> records;
 };

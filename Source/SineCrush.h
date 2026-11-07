@@ -48,6 +48,7 @@ public:
         const float effectiveRate=advanced?rate*std::exp(reach*(-1.1f*robot+.25f*warm)):rate;
         crusher.setModern(effectiveBits,effectiveRate,.04f+.12f*warm,.04f+.24f*warm,frames);
     }
+    const float* foundation()const noexcept{return low.data();}
     void process(float* frame,int channels) noexcept
     {
         for(std::size_t i=0;i<control.size();++i)control[i]+=step[i];
