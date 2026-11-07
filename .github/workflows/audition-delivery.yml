@@ -13,13 +13,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Render synthetic auditions only (no plugin build)
         run: |
-          g++ -O3 -std=c++17 -ISource -Itests audition-review/CleanComparison.cpp -o "$RUNNER_TEMP/wubrot-audition"
-          "$RUNNER_TEMP/wubrot-audition" audition-review/clean-wavs
+          g++ -O3 -std=c++17 -ISource -Itests audition-review/RingAudition.cpp -o "$RUNNER_TEMP/wubrot-audition"
+          "$RUNNER_TEMP/wubrot-audition" audition-review/ring-wavs
       - uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-crisp-components
+          name: WUBROT-ring-auditions
           path: |
-            audition-review/clean-wavs/
-            audition-review/CLEAN-README.md
+            audition-review/ring-wavs/
+            audition-review/RING-README.md
           retention-days: 90
           if-no-files-found: error

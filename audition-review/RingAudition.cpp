@@ -1,0 +1,26 @@
+// Offline, input-following ring-modulation listening prototype. No plugin integration.
+#include "../tests/ControlFixtures.h"
+struct Ring {
+ double clock=1,profileTime=0;float held=0,loError=0,lp=0,envelope=0,prev=0,re=1,im=0,cr=1,ci=0,levels=128,depth=0;int samples=0,lastCross=-1,count=0;std::array<int,5> periods{};std::array<float,256> delay{};int cursor=0;float confidence=0,reliability=0,oscHz=70,tracked=70,lastX=2,lastY=2;XYMapping cached{};std::array<float,4> weights{};
+ float tick(float x,float xx,float yy,float drive,float mutate,const DnaProfile*dna,bool enabled){
+  envelope+=.002f*(std::abs(x)-envelope);lp+=.035f*(x-lp);++samples;
+  if(prev<=0&&lp>0&&envelope>.0005f){int period=samples-lastCross;if(lastCross>=0&&period>=120&&period<=1600){periods[count++%5]=period;if(count>=5){auto p=periods;std::sort(p.begin(),p.end());float spread=float(p[4]-p[0])/p[2];confidence=spread<.22f?1:0;if(confidence)tracked+=.25f*(48000.f/p[2]-tracked);}}lastCross=samples;}prev=lp;if(lastCross>=0&&samples-lastCross>3200)confidence=0;
+  if(xx!=lastX||yy!=lastY){lastX=xx;lastY=yy;cached=XYMapping::map(xx,yy,sr,4);float ax=std::tanh(3*xx),ay=std::tanh(3*yy);weights={(1-ax)*(1-ay)*.25f,(1+ax)*(1-ay)*.25f,(1-ax)*(1+ay)*.25f,(1+ax)*(1+ay)*.25f};}const auto& map=cached;const auto& w=weights;
+  if(samples%256==1){auto s=dna?dna->spectralAt(float(std::fmod(profileTime/std::max(.01,dna->duration),1.))):DnaTemporalFrame{};float m=dna?mutate:0;float ratio=(w[0]*.51f+w[1]*1.41421356f+w[2]*.75f+w[3]*2.37f)*(1+m*.5f*(s.features[1]-.5f));oscHz+=.25f*(std::clamp(tracked*ratio,25.f,1200.f)-oscHz);float angle=6.2831853f*oscHz/sr;cr=std::cos(angle);ci=std::sin(angle);float norm=1/std::sqrt(re*re+im*im);re*=norm;im*=norm;levels=std::exp2(std::clamp(map.bits+m*(s.bands[3]-s.bands[8]),2.f,16.f)-1);depth=(w[0]*.55f+w[1]*.95f+w[2]*.3f+w[3]*.8f)*std::min(1.f,map.activity*1.5f);}
+  float carrier=im;if(envelope>.0001f){float next=re*cr-im*ci;im=im*cr+re*ci;re=next;profileTime+=1./sr;}
+  float delayed=delay[cursor];delay[cursor]=x;cursor=(cursor+1)%256;float derived=std::clamp(delayed/(envelope*2+.005f),-1.f,1.f);reliability+=.002f*(confidence-reliability);carrier=reliability*carrier+(1-reliability)*derived;
+  float stepped=std::round(carrier*3)/3;carrier+=w[3]*(stepped-carrier);if(drive>0)carrier=std::round(carrier*(6-4*drive))/(6-4*drive);
+  float excited=x+drive*.6f*x*x/(.1f+x*x);float modulated=excited*((1-(enabled?depth:0))+(enabled?depth:0)*carrier);
+  if(clock>=1){clock-=std::floor(clock);float encoded=modulated/(.65f+.35f*std::abs(modulated));float warm=std::round(encoded*levels)/levels;warm=.65f*warm/std::max(.35f,1-.35f*std::abs(warm));float uniform=std::round(modulated*levels)/levels;held=uniform+w[2]*(warm-uniform);}clock+=map.rate/sr;
+  float error=held-x;loError+=.023f*(error-loError);float out=x+std::min(1.f,map.activity*8)*(error-loError);return map.activity==0?x:out;
+ }
+};
+static std::vector<float> source(int k){auto a=bass(k<2?k==0?0:2:1,sr*2);for(int i=0;i<int(a.size());++i){float t=float(i)/sr;if(k==2)a[i]=.25f*std::sin(6.2831853f*55*t+2.3f*std::sin(6.2831853f*137*t));if(k==3)a[i]=.3f*std::tanh(6*a[i]);}return a;}
+static std::vector<float> process(const std::vector<float>&a,float x,float y,float d,float m,const DnaProfile*p,bool enabled){Ring f;std::vector<float>b;b.reserve(a.size());for(float v:a){float z=f.tick(v,x,y,d,m,p,enabled);require(std::isfinite(z)&&std::abs(z)<4,"Ring instability");b.push_back(z);}return b;}
+static void add(std::vector<float>&out,const std::vector<float>&a){auto b=match(a);out.insert(out.end(),b.begin(),b.end());out.resize(out.size()+sr/4,0);}
+static std::vector<float> raw(const char* p){std::ifstream f(p,std::ios::binary|std::ios::ate);auto size=f.tellg();require(size>0,"Missing private input");std::vector<float>a(std::size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(a.data()),size);return a;}
+int main(int argc,char**argv){std::filesystem::path dir(argv[1]);std::filesystem::create_directories(dir);auto metal=analyse(reference(0)),vocal=analyse(reference(1)),noise=analyse(reference(2));std::vector<std::vector<float>> inputs;if(argc>2){for(int i=2;i<argc;++i)inputs.push_back(raw(argv[i]));}else for(int k=0;k<4;++k)inputs.push_back(source(k));std::vector<float> dry;for(auto&a:inputs)add(dry,a);wav(dir/"00-dry.wav",dry);
+ for(int q=0;q<4;++q)for(bool on:{false,true}){std::vector<float> out;for(auto&a:inputs)add(out,process(a,q&1?.55f:-.55f,q&2?.55f:-.55f,0,0,nullptr,on));wav(dir/("quadrant"+std::to_string(q)+(on?"-ring-on.wav":"-ring-off.wav")),out);}
+ for(int d=0;d<3;++d){std::vector<float> out;for(auto&a:inputs)add(out,process(a,.55f,-.55f,d*.5f,0,nullptr,true));wav(dir/("drive"+std::to_string(d*50)+".wav"),out);}
+ int j=0;for(auto*p:{&metal,&vocal,&noise}){std::vector<float>out;for(int m=0;m<3;++m)add(out,process(inputs[1],.55f,-.55f,0,m*.5f,p,true));wav(dir/("dna"+std::to_string(j++)+"-M0-50-100.wav"),out);}
+ auto silence=std::vector<float>(sr,0);require(process(silence,.6f,-.6f,1,1,&metal,true)==silence,"Silence failed");auto a=source(0);require(process(a,0,0,1,1,&metal,true)==a,"Centre failed");require(process(a,.5f,-.5f,0,0,&metal,true)==process(a,.5f,-.5f,0,0,nullptr,true),"M0 mismatch");std::cout<<"Offline ring auditions and invariant checks passed. Not real-time integration/certification.\n";}
