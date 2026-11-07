@@ -49,7 +49,7 @@ public:
         smooth(current.drive,std::clamp(target.drive,0.0f,36.0f));smooth(current.bits,std::clamp(target.bits,2.0f,16.0f));
         if(target.centered&&target.drive<=0&&current.drive<1.0e-6f)current.drive=0;
         smooth(current.rate,std::clamp(target.rate,500.0f,static_cast<float>(sampleRate)));
-        smooth(current.mix,std::clamp(target.mix,0.0f,1.0f));smooth(current.output,std::clamp(target.output,-24.0f,6.0f));
+        if(modern){const float m=std::clamp(target.mix,0.f,1.f),stepMix=1/float(sampleRate*.02);current.mix+=std::clamp(m-current.mix,-stepMix,stepMix);}else smooth(current.mix,std::clamp(target.mix,0.0f,1.0f));smooth(current.output,std::clamp(target.output,-24.0f,6.0f));
         smooth(current.protect,std::clamp(target.protect,0.0f,1.0f));if(modern){const float m=std::clamp(target.mutate,0.f,1.f),stepM=1/float(sampleRate*.02);current.mutate+=std::clamp(m-current.mutate,-stepM,stepM);}else smooth(current.mutate,std::clamp(target.mutate,0.0f,1.0f));smooth(current.speed,std::clamp(target.speed,.25f,4.0f));
         if(current.mode!=target.mode){current.mode=target.mode;resetModulation();}
         float peak=0,high=0;

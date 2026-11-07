@@ -193,6 +193,35 @@ int main(int argc, char **argv)
         if (kind == 4)
             require(render(a, .5f, .5f, &metal) == a, "Independent audible layer on silence");
     }
+    // Wet contributions must reach exactly zero, not leave an asymptotic tail.
+    for (int rate : {44100, 48000, 96000, 192000})
+    {
+        CrushDSP dsp;
+        dsp.prepare(rate);
+        CrushDSP::Parameters p;
+        const auto mapping = XYMapping::map(.6f, -.4f, rate, 3);
+        p.processingVersion = 3;
+        p.centered = true;
+        p.bits = mapping.bits;
+        p.rate = mapping.rate;
+        p.activity = mapping.activity;
+        p.signedX = .6f;
+        p.signedY = -.4f;
+        p.mix = 1;
+        p.output = 0;
+        p.mutate = 1;
+        p.drive = 36;
+        for (int i = 0; i < rate / 10; ++i)
+        {
+            const float original = .25f * std::sin(i * .04f);
+            float frame[]{original, original};
+            if (i == rate / 20) p.mix = 0;
+            dsp.processFrame(frame, 2, p, &metal);
+            if (i > rate * .075)
+                require(frame[0] == original && frame[1] == original,
+                        "Wet mix did not reach exact dry after its 20 ms ramp");
+        }
+    }
     auto input = bass(1);
     double minimumQuadrant = 10, minimumSpectrum = 10;
     for (float distance : {.3f, .55f, .9f})
