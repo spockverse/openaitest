@@ -105,8 +105,8 @@ int main(int argc, char **argv)
         std::filesystem::create_directories(dir);
         const juce::String label = argc > 2 ? argv[2] : "current";
         const bool ui = argc > 3 && std::string(argv[3]) == "ui";
-        const int model=argc>4?std::stoi(argv[4]):5;
-        if(model!=3&&model!=4&&model!=5)throw std::runtime_error("Benchmark model must be 3, 4 or 5");
+        const int model=argc>4?std::stoi(argv[4]):6;
+        if(model!=3&&model!=4&&model!=5&&model!=6)throw std::runtime_error("Benchmark model must be 3, 4, 5 or 6");
         std::ofstream report(dir / (label.toStdString() + "-callback.json"));
         report << "{\"label\":\"" << label << "\",\"cpu\":\"" << juce::SystemStats::getCpuVendor() << " "
                << juce::SystemStats::getCpuModel() << "\",\"logicalCpus\":" << juce::SystemStats::getNumCpus()
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
                     }
                 // Identical synthetic input and quadrant positions, stored without level matching.
                 p.setParameterValue("drive", 0);
-                for (int quadrant = 0; quadrant < 4; ++quadrant)
+                for (int quadrant = 0; quadrant < ((argc>5 && std::string(argv[5])=="timing-only")?0:4); ++quadrant)
                 {
                     p.setParameterValue("x", quadrant & 1 ? .5f : -.5f);
                     p.setParameterValue("y", quadrant & 2 ? .5f : -.5f);

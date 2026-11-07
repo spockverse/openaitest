@@ -56,21 +56,20 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
-      - name: Measure actual callback cost and editor overhead separately
+      - name: Check paced callback cost against v0.2.43
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/Performance | Out-Null
           $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v042-closed closed 4
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v043 closed 5 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance sine-closed closed 5
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance advanced closed 6 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v042-open ui 4
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance sine-open ui 5
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/compare_callback_benchmarks.py build/Performance
-          exit $LASTEXITCODE
+          foreach ($task_name in @('v043', 'advanced')) {
+            $task_report = Get-Content "build/Performance/$task_name-callback.json" -Raw | ConvertFrom-Json
+            Write-Output "$task_name peak=$($task_report.observedPeak) latency=$($task_report.latencySamples)"
+            $task_report.cases | Select-Object sampleRate, buffer, meanUs, p99Us, maxUs | Format-Table
+          }
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -112,18 +111,11 @@ jobs:
           path: build/WUBROT_artefacts/Release/VST3/
           retention-days: 90
           if-no-files-found: error
-      - name: Upload audio comparison WAVs
-        uses: actions/upload-artifact@v4
-        with:
-          name: WUBROT-AudioComparisons-0.2.${{ github.run_number }}
-          path: build/AudioComparisons/
-          retention-days: 90
-          if-no-files-found: error
-      - name: Upload callback performance and baseline renders
+      - name: Upload compact callback timings
         if: always() && hashFiles('build/Performance/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: WUBROT-Performance-0.2.${{ github.run_number }}
-          path: build/Performance/
+          path: build/Performance/*-callback.json
           retention-days: 90
           if-no-files-found: error

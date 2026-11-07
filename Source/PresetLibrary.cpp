@@ -104,7 +104,7 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
     if(s.hasProperty("xyMapping"))
     {
         double version=0;
-        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5))
+        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6))
             return juce::Result::fail("Unsupported XY mapping version. Update WUBROT to load this preset.");
     }
     struct Bound
@@ -176,7 +176,7 @@ juce::Result PresetLibrary::read(const juce::File &f, juce::ValueTree &state, ju
     auto xml = juce::parseXML(text);
     if (!xml || !xml->hasTagName("WubrotPreset") || xml->getStringAttribute("plugin") != "WUBROT")
         return juce::Result::fail("This is not a compatible WUBROT preset.");
-    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2" && xml->getStringAttribute("formatVersion") != "3" && xml->getStringAttribute("formatVersion") != "4" && xml->getStringAttribute("formatVersion") != "5")
+    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2" && xml->getStringAttribute("formatVersion") != "3" && xml->getStringAttribute("formatVersion") != "4" && xml->getStringAttribute("formatVersion") != "5" && xml->getStringAttribute("formatVersion") != "6")
         return juce::Result::fail("Unsupported preset version. Update WUBROT to open this file.");
     name = xml->getStringAttribute("name");
     auto r = validName(name);

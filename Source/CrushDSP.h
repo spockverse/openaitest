@@ -124,7 +124,10 @@ public:
             crusher.setModern(current.bits,current.rate,modernCharacter.antiAlias,modernCharacter.rebuild,controlInterval);
             tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact);
             if(sine){
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,driveUnit,current.protect,articulation,controlInterval);
+                const bool advanced=target.processingVersion>=6;
+                const float dnaShift=advanced?influence*(std::clamp(modernShape.logPeaks[0]-6.5510803f,-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
+                const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,driveUnit,current.protect,articulation,controlInterval,advanced,dnaShift,dnaMotion);
                 // Keep optional DNA coloration; no generic moving resonators in the core.
                 tonal.setModern(.4f,.25f*influence,influence,modernShape,0,controlInterval,false);
             }
