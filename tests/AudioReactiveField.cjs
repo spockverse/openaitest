@@ -33,7 +33,9 @@ async function open(b,width,height,fallback=false){
       const metrics=await p.evaluate(()=>{
         cancelAnimationFrame(frameRequest);frameRequest=0;
         const old=new BaselineGelRenderer(document.createElement('canvas'));old.gl.canvas.width=old.gl.canvas.height=640;
-        const read=(r,gain=0,light=gain)=>{r.render(jelly,gel,2.75,1,gain,light);const v=new Uint8Array(640*640*4);r.gl.readPixels(0,0,640,640,r.gl.RGBA,r.gl.UNSIGNED_BYTE,v);return v;};
+        // Isolate approved material pixels; GridDeformation separately checks
+        // the intentionally relocated targeting marks with grid ink enabled.
+        const read=(r,gain=0,light=gain)=>{r.render(jelly,gel,2.75,1,gain,light,0);const v=new Uint8Array(640*640*4);r.gl.readPixels(0,0,640,640,r.gl.RGBA,r.gl.UNSIGNED_BYTE,v);return v;};
         let baselineDelta=0,changed=0,lightLift=0,alphaDelta=0;
         for(const[x,y]of[[0,0],[.72,-.4],[-1,0],[0,1]]){
           setXY(x,y);cancelAnimationFrame(frameRequest);frameRequest=0;membrane.x=px-.03;membrane.y=py+.02;gel.advance(.02);
@@ -74,7 +76,7 @@ async function open(b,width,height,fallback=false){
       await p.locator('#motion').click();await p.waitForTimeout(50);await p.evaluate(()=>listeners.wubrotAudio({intensity:1}));assert.equal(await p.evaluate(()=>audioVisual.value),0);
       await p.locator('#motion').click();
       if(process.env.WUBROT_SCREENSHOTS){await p.evaluate(()=>{audioVisual.receive(1,performance.now());});await p.waitForTimeout(40);await p.screenshot({path:path.join(process.env.WUBROT_SCREENSHOTS,`audio-reactive-${width}.png`)});}
-      assert.deepEqual(errors,[]);console.log(width,'zero-boost v031 pixels identical; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
+      assert.deepEqual(errors,[]);console.log(width,'grid-disabled v031 material pixels identical; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
     }
     const{p,errors}=await open(b,804,697,true);
     const fallback=await p.evaluate(()=>{cancelAnimationFrame(frameRequest);frameRequest=0;idleClock=2.75;audioVisual.reset();paint(true);const zero=Array.from(fallbackPoints);audioVisual.value=1;paint(true);let delta=0;for(let i=0;i<zero.length;i++)delta+=Math.abs(zero[i]-fallbackPoints[i]);return{delta,gpu:!!renderer.gl};});

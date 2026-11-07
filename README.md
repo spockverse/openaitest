@@ -8,6 +8,8 @@ The existing power button retains its click-free dry bypass. OFF also extinguish
 
 The existing Crush Field movement also responds gently to low-end attacks in WUBROT's own incoming audio. A read-only three-band observer (30–180, 180–700 and 700–2500 Hz) prioritizes low/body energy and adds midrange articulation. It briefly boosts the existing ripple displacement and purple reflections, adding no new waves, controls, audio, or latency. Sustained bass settles to a gentle response capped at one tenth of the reactive boost rather than keeping the material maximized. Silence retains the original animation, and OFF/hidden/static-animation states suppress reactive rendering. It cannot hear other DAW tracks unless they are routed through this instance; there is no external sidechain input.
 
+The thin targeting circles and crosshairs are printed in the jelly's material coordinates. They bend with the same deformation, including audio-driven intensity, while the XY handle remains at its exact parameter position.
+
 ## Controls
 
 - **Crush Field X:** move right for fewer bits (16 down to 2).

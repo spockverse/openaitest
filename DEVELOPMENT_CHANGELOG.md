@@ -1,3 +1,9 @@
+# Embedded targeting grid
+
+- Moved the four concentric guide circles, crosshairs and endpoint dots out of the rigid orb-overlay canvas. The shader evaluates thin translucent markings at the exact source UV used to sample the jelly artwork, after the existing disk mapping, gesture/idle refraction, tension and audio-reactive displacement. Derivative antialiasing keeps strokes legible across compression/stretching; a derivative-free shader path retains the same surface coordinates when the extension is unavailable.
+- Canvas fallback marks a cached copy of its existing source material and sends it through the identical mesh, UVs and lighting. No extra animation or displacement model. The orb canvas now draws only the existing handle/glow. Frozen OFF snapshots include the embedded grid.
+- The approved material renderer is pixel-identical with grid ink disabled across center, axes and four diagonal extremes with idle/audio deformation, at all three sizes. Independent UV readback verifies the visible markings follow sampled material coordinates. Circular alpha, XY parameters, orb alignment, fallback geometry and OFF freezing are checked separately. Native DSP, detector, parameters and project state code are unchanged. Browser and native checks remain separate from manual FL Studio verification. No public release.
+
 # Audio-reactive Crush Field intensity
 
 - Preserved GelPhysics, the membrane integrator, ripple phases, orbital mapping and animation clock. A bounded audio follower multiplies the existing renderer displacement by up to 1.55 and lifts existing local reflections by up to 16%, using the existing orb-relative locality. The Canvas fallback scales its existing deformation too. No additional ripple source, UI control, phase, oscillator or layout change.

@@ -232,9 +232,27 @@ class GelRenderer {
     attribute vec2 aPosition;varying vec2 uv;
     void main(){uv=vec2(aPosition.x*.5+.5,.5-aPosition.y*.5);gl_Position=vec4(aPosition,0.,1.);}
    `);
+   const derivatives=!!gl.getExtension('OES_standard_derivatives');
    const fragment=shader(gl.FRAGMENT_SHADER,`
+    ${derivatives?'#extension GL_OES_standard_derivatives : enable':''}
     precision highp float;varying vec2 uv;
-    uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;uniform float reactiveGain;uniform float reactiveLight;
+    uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;uniform float reactiveGain;uniform float reactiveLight;uniform float gridAmount;
+    float gridPixel(float v){return ${derivatives?'max(length(vec2(dFdx(v),dFdy(v))),.0001)':'1.'};}
+    float gridStroke(float distance,float pixel,float width){return clamp(.5+.5*width-distance/pixel,0.,1.);}
+    float targetingInk(vec2 material){
+     // Markings live in the SAME sampled material UV as the reflective artwork.
+     // Convert only units: at neutral XY these retain the original design radii.
+     vec2 g=(material-.5)*(640.*.4671875/.435);
+     float r=length(g),pr=gridPixel(r),px=gridPixel(g.x),py=gridPixel(g.y);
+     float rings=max(max(gridStroke(abs(r-103.),pr,.8),gridStroke(abs(r-167.),pr,.8)),gridStroke(abs(r-238.),pr,.8))*.47;
+     rings=max(rings,gridStroke(abs(r-205.),pr,1.7)*.69);
+     float horizontal=gridStroke(abs(g.y),py,.8)*(1.-smoothstep(294.,296.,abs(g.x)));
+     float vertical=gridStroke(abs(g.x),px,.8)*(1.-smoothstep(294.,296.,abs(g.y)));
+     float guides=max(horizontal,vertical)*.50;
+     vec2 dotDelta=vec2(abs(g.x),abs(g.y));
+     float dots=min(length(dotDelta-vec2(295.,0.)),length(dotDelta-vec2(0.,295.)));
+     return max(max(rings,guides),gridStroke(dots,gridPixel(dots),3.));
+    }
     void main(){
      vec2 p=uv-.5;float radius=length(p);
      // A disk automorphism maps the sphere to the artwork cavity while preserving the circular rim.
@@ -265,6 +283,7 @@ class GelRenderer {
      colour*=1.+reactiveLight*.16*locality*edge;
      float rim=smoothstep(.455,.463,radius)*(1.-smoothstep(.464,.4671875,radius));
      colour+=vec3(.30,.10,.43)*rim*(.5+.5*sin(atan(p.y,p.x)*3.+.8));
+     if(gridAmount>0.)colour=mix(colour,vec3(.91,.89,.95),targetingInk(source)*gridAmount);
      gl_FragColor=vec4(colour,alpha);
     }
    `);
@@ -283,14 +302,14 @@ class GelRenderer {
    this.artwork=texture(gl.TEXTURE0);gl.uniform1i(gl.getUniformLocation(program,'artwork'),0);
    this.normals=texture(gl.TEXTURE1);gl.uniform1i(gl.getUniformLocation(program,'normals'),1);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,64,64,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(64*64*4).fill(128));
-   this.reactiveGain=gl.getUniformLocation(program,'reactiveGain');this.reactiveLight=gl.getUniformLocation(program,'reactiveLight');this.anchor=gl.getUniformLocation(program,'anchor');this.materialLag=gl.getUniformLocation(program,'materialLag');this.idleTime=gl.getUniformLocation(program,'idleTime');this.idleAmount=gl.getUniformLocation(program,'idleAmount');this.body=gl.getUniformLocation(program,'body');this.program=program;this.gl=gl;
+   this.gridAmount=gl.getUniformLocation(program,'gridAmount');this.reactiveGain=gl.getUniformLocation(program,'reactiveGain');this.reactiveLight=gl.getUniformLocation(program,'reactiveLight');this.anchor=gl.getUniformLocation(program,'anchor');this.materialLag=gl.getUniformLocation(program,'materialLag');this.idleTime=gl.getUniformLocation(program,'idleTime');this.idleAmount=gl.getUniformLocation(program,'idleAmount');this.body=gl.getUniformLocation(program,'body');this.program=program;this.gl=gl;
   }catch(error){
    // Keep the existing artwork usable if WebGL is unavailable or fails to initialise.
    this.gl=null;
   }
   surface.dataset.renderer=this.gl?'webgl':'canvas-fallback';
  }
- render(image,gel,idleTime=0,idleAmount=0,reactiveGain=0,reactiveLight=reactiveGain){
+ render(image,gel,idleTime=0,idleAmount=0,reactiveGain=0,reactiveLight=reactiveGain,gridAmount=1){
   const gl=this.gl;if(!gl||gl.isContextLost())return false;
   if(!image.complete||!image.naturalWidth)return true;
   gl.useProgram(this.program);gl.viewport(0,0,640,640);
@@ -298,7 +317,7 @@ class GelRenderer {
   if(!this.ready){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);this.ready=true;}
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.normals);
   gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,64,64,gl.RGBA,gl.UNSIGNED_BYTE,gel.normals());
-  gl.uniform1f(this.reactiveGain,reactiveGain);gl.uniform1f(this.reactiveLight,reactiveLight);gl.uniform2f(this.anchor,px*.421875,py*.421875);gl.uniform2f(this.materialLag,(px-membrane.x)*.421875,(py-membrane.y)*.421875);gl.uniform1f(this.idleTime,idleTime);gl.uniform1f(this.idleAmount,idleAmount);gl.uniform2f(this.body,gel.x,gel.y);gl.drawArrays(gl.TRIANGLES,0,6);return true;
+  gl.uniform1f(this.gridAmount,gridAmount);gl.uniform1f(this.reactiveGain,reactiveGain);gl.uniform1f(this.reactiveLight,reactiveLight);gl.uniform2f(this.anchor,px*.421875,py*.421875);gl.uniform2f(this.materialLag,(px-membrane.x)*.421875,(py-membrane.y)*.421875);gl.uniform1f(this.idleTime,idleTime);gl.uniform1f(this.idleAmount,idleAmount);gl.uniform2f(this.body,gel.x,gel.y);gl.drawArrays(gl.TRIANGLES,0,6);return true;
  }
 }
 </script>
@@ -429,9 +448,17 @@ canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=p
 const membrane={x:0,y:0,vx:0,vy:0};
 const audioVisual=new AudioReactiveVisual();
 const fallbackGrid=8,fallbackSectors=64,fallbackPoints=new Float32Array(9*65*2),fallbackSources=new Float32Array(9*65*2);
-let fallbackArtwork=null;
-function paintFallbackWaves(){
- if(!fallbackArtwork){fallbackArtwork=document.createElement('canvas');fallbackArtwork.width=fallbackArtwork.height=640;fallbackArtwork.getContext('2d').drawImage(jelly,6,6,628,628);}
+let fallbackArtwork=null,fallbackMarkedArtwork=null;
+function paintFallbackWaves(grid=true){
+ if(!fallbackArtwork){
+  fallbackArtwork=document.createElement('canvas');fallbackArtwork.width=fallbackArtwork.height=640;fallbackArtwork.getContext('2d').drawImage(jelly,6,6,628,628);
+  fallbackMarkedArtwork=document.createElement('canvas');fallbackMarkedArtwork.width=fallbackMarkedArtwork.height=640;
+  const gc=fallbackMarkedArtwork.getContext('2d'),scale=.435*628/299;
+  gc.drawImage(fallbackArtwork,0,0);gc.save();gc.translate(320,320);gc.scale(scale,scale);
+  for(const radius of [103,167,205,238]){gc.beginPath();gc.arc(0,0,radius,0,Math.PI*2);gc.strokeStyle=radius===205?'rgba(232,227,242,.69)':'rgba(232,227,242,.47)';gc.lineWidth=radius===205?1.7:.8;gc.stroke();}
+  gc.strokeStyle='rgba(232,227,242,.50)';gc.lineWidth=.8;gc.beginPath();gc.moveTo(-295,0);gc.lineTo(295,0);gc.moveTo(0,-295);gc.lineTo(0,295);gc.stroke();
+  for(const [x,y]of[[-295,0],[295,0],[0,-295],[0,295]]){gc.fillStyle='rgba(232,227,242,1)';gc.beginPath();gc.arc(x,y,1.5,0,Math.PI*2);gc.fill();}gc.restore();
+ }
  const n=fallbackGrid,sectors=fallbackSectors,ax=px*270/299,ay=py*270/299;
  for(let y=0;y<=n;y++)for(let x=0;x<=sectors;x++){
   const angle=x/sectors*Math.PI*2,bx=Math.cos(angle),by=Math.sin(angle);
@@ -459,7 +486,7 @@ function paintFallbackWaves(){
   // Slightly overlap the clips to avoid hairline cracks between warped triangles.
   const mx=(x0+x1+x2)/3,my=(y0+y1+y2)/3;
   ctx.save();ctx.beginPath();ctx.moveTo(mx+(x0-mx)*1.015,my+(y0-my)*1.015);ctx.lineTo(mx+(x1-mx)*1.015,my+(y1-my)*1.015);ctx.lineTo(mx+(x2-mx)*1.015,my+(y2-my)*1.015);ctx.closePath();ctx.clip();
-  ctx.transform(a,b,c,d,x0-a*u0-c*v0,y0-b*u0-d*v0);ctx.drawImage(fallbackArtwork,0,0);ctx.restore();
+  ctx.transform(a,b,c,d,x0-a*u0-c*v0,y0-b*u0-d*v0);ctx.drawImage(grid?fallbackMarkedArtwork:fallbackArtwork,0,0);ctx.restore();
  }
  for(let y=0;y<n;y++)for(let x=0;x<sectors;x++){
   const i=(y*(sectors+1)+x)*2,right=i+2,down=i+(sectors+1)*2,diagonal=down+2;
@@ -467,22 +494,18 @@ function paintFallbackWaves(){
   tri(i,right,down);tri(right,diagonal,down);
  }
 }
-function paint(fallback){
+function paint(fallback,grid=true){
  const w=640,c=320,r=299;ctx.clearRect(0,0,w,w);
  // Graceful fallback: a smooth spring transform, never the old sliced-image animation.
  if(fallback&&jelly.complete&&jelly.naturalWidth){
   ctx.save();ctx.beginPath();ctx.arc(c,c,299,0,Math.PI*2);ctx.clip();
   // Lift the existing material itself; no extra lighting/ripple overlay.
   if(engineIsOn()&&audioVisual.value>0)ctx.filter=`brightness(${1+audioVisual.value*.10})`;
-  paintFallbackWaves();
+  paintFallbackWaves(grid);
   ctx.restore();
  }
- // Fine interface guides overlay the photographic gel, matching the supplied reference.
- ctx.save();ctx.beginPath();ctx.arc(c,c,299,0,Math.PI*2);ctx.clip();
- ctx.lineWidth=1;for(const radius of [103,167,205,238]){ctx.beginPath();ctx.arc(c+px*270,c+py*270,radius,0,Math.PI*2);ctx.strokeStyle=radius===205?'#e496ffb0':'#cb6ce477';ctx.lineWidth=radius===205?1.7:.8;ctx.stroke();}
- ctx.restore();
- ctx.strokeStyle='#e5a3ff80';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(25,c);ctx.lineTo(615,c);ctx.moveTo(c,25);ctx.lineTo(c,615);ctx.stroke();
- for(const [x,y] of [[25,c],[615,c],[c,25],[c,615]]){ctx.fillStyle='#edb6ff';ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();}
+ // Targeting marks are part of the deformed material (shader or source mesh).
+ // This canvas retains only the existing orb; no rigid guide overlay remains.
  // The handle stays exactly at the parameter position; only the surrounding gel lags.
  const {x:ox,y:oy}=orbPoint();if(engineIsOn()){const glow=ctx.createRadialGradient(ox,oy,8,ox,oy,47);glow.addColorStop(0,'#f5a5ff77');glow.addColorStop(1,'#bf68ff00');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(ox,oy,47,0,Math.PI*2);ctx.fill();}
  orbAnchor.style.left=(ox/FIELD.size*100)+'%';orbAnchor.style.top=(oy/FIELD.size*100)+'%';
