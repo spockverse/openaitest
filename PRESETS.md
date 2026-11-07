@@ -25,7 +25,7 @@ Export writes the stored user preset. Save current edits first if you want those
 `.wubpreset` is UTF-8 XML, capped at 2 MiB:
 
 ```xml
-<WubrotPreset formatVersion="2" plugin="WUBROT" name="Metallic Yoi">
+<WubrotPreset formatVersion="3" plugin="WUBROT" name="Metallic Yoi">
   <WubrotState ...analysis and metadata properties...>
     <PARAM id="x" value="0.3"/>
     <!-- all 12 existing sound parameters -->
@@ -33,7 +33,7 @@ Export writes the stored user preset. Save current edits first if you want those
 </WubrotPreset>
 ```
 
-The inner state uses the same APVTS `WubrotState` structure as DAW projects. Required parameters retain their existing IDs and order: `x`, `y`, `mutate`, `drive`, `mode`, `mix`, `output`, `protect`, `enabled`, `regionStart`, `regionEnd`, `dnaSpeed`. All are validated against their ranges; discrete values must be integral. The optional `xyMapping` property selects the sound model: missing/1 retains the original mapping and processing exactly; 2 is the new centred mapping. New centred sounds use outer `formatVersion="2"`, so older plugins reject them rather than silently interpreting their XY differently. This build reads both format versions. Saving a legacy sound retains version 1; renaming/exporting preserves its model. Mapping version participates in the dirty-state signature without adding an automation parameter. Informational `crushBitDepth`, `crushSampleRate` and `referenceSampleRate` properties document the reduction at the saving host's sample rate; they do not add parameters or change the processing model.
+The inner state uses the same APVTS `WubrotState` structure as DAW projects. Required parameters retain their existing IDs and order: `x`, `y`, `mutate`, `drive`, `mode`, `mix`, `output`, `protect`, `enabled`, `regionStart`, `regionEnd`, `dnaSpeed`. All are validated against their ranges; discrete values must be integral. The optional `xyMapping` property selects the sound model: missing/1 retains the original mapping and processing exactly; 2 retains the v0.2.37 centred sound; 3 adds signed regions and temporal spectral DNA. New sounds use outer `formatVersion="3"`, so older plugins reject them rather than silently interpreting their XY differently. This build reads versions 1, 2 and 3. Saving a legacy sound retains its original model/container; renaming/exporting preserves its model. Mapping version participates in the dirty-state signature without adding an automation parameter. Informational `crushBitDepth`, `crushSampleRate` and `referenceSampleRate` properties document the reduction at the saving host's sample rate; they do not add parameters or change the processing model.
 
 The versioned outer container rejects unsupported future versions rather than guessing. XML document types/entities, missing/duplicate parameters, invalid values and corrupt analysis arrays are rejected before applying a state. There is no code, external file dependency, or original audio in the portable format. The `sourceWav` property is explicitly forbidden.
 
@@ -41,7 +41,7 @@ The versioned outer container rejects unsupported future versions rather than gu
 
 `presetProfile` is a JSON property containing the **exact active** DnaProfile: validity, duration, 2,048 envelope points, 2,048 temporal brightness/character points and a spectral descriptor. This retains the saved selected-region sound exactly. A spectral descriptor is an array with validity followed by 12 band levels, five character features and three resonance frequencies; peak levels are derived by the existing algorithm.
 
-`dnaArchive` is a version-1 JSON object containing the full-sample profile plus 64 time slices of spectral descriptors. It contains **analysis descriptors only**, never PCM, a wavetable, or a buffer played as audio. The original audio filename is informational and need not exist. Typical files are well below the 2 MiB cap.
+`dnaArchive` is a version-1 JSON object containing the full-sample profile plus 64 time slices of spectral descriptors. It contains **analysis descriptors only**, never PCM, a wavetable, or a buffer played as audio. The original audio filename is informational and need not exist. Temporal-analysis archives use version 2 and include the full 128-frame spectral timeline; the active profile also retains its exact selected-region timeline. Legacy version-1 archives remain supported. Each frame contains 26 bounded numeric descriptors, never PCM. New-model presets missing required temporal descriptors are rejected. Typical files remain well below the 2 MiB cap.
 
 Restored presets show **DNA ENVELOPE (ANALYSIS)** and disclose that no original audio is included. START/END, SPEED and LOOP/RETRIGGER remain usable. Editing a new region interpolates/crops the stored temporal analysis and combines overlapping spectral slices; it does not re-run an FFT on an unavailable WAV. Consequently, a newly selected region is an analysis-based approximation of reanalysing that exact region of the source audio. Returning to the originally saved START/END restores its exact active profile. Loading the original WAV enables full audio-based analysis again. Legacy projects with only an active snapshot can still play, but saving them as fully editable portable presets requires loading the source once to create the full archive.
 

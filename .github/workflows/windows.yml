@@ -9,7 +9,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -56,6 +56,36 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
+      - name: Build pre-change processor for callback comparison
+        shell: pwsh
+        run: |
+          python tools/prepare_benchmark_baseline.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $PSNativeCommandUseErrorActionPreference = $false
+          cmake -S benchmark-baseline-source -B benchmark-baseline-build -A x64 "-DFETCHCONTENT_SOURCE_DIR_JUCE=${{ github.workspace }}/build/_deps/juce-src" "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${{ github.workspace }}/webview2" -DWUBROT_VERSION=0.2.37 *> baseline-configure.log
+          $task_status = $LASTEXITCODE
+          Get-Content baseline-configure.log
+          if ($task_status -ne 0) { python tools/ci_error_annotation.py baseline-configure.log; exit $task_status }
+          cmake --build benchmark-baseline-build --config Release --target WubrotCallbackBenchmark --parallel 2 *> baseline-build.log
+          $task_status = $LASTEXITCODE
+          Get-Content baseline-build.log
+          if ($task_status -ne 0) { python tools/ci_error_annotation.py baseline-build.log }
+          exit $task_status
+      - name: Measure actual callback cost and editor overhead separately
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/Performance | Out-Null
+          $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
+          & benchmark-baseline-build/Release/WubrotCallbackBenchmark.exe build/Performance v037-closed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v3-closed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & benchmark-baseline-build/Release/WubrotCallbackBenchmark.exe build/Performance v037-open ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v3-open ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/compare_callback_benchmarks.py build/Performance
+          exit $LASTEXITCODE
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -82,7 +112,7 @@ jobs:
               exit $task_browser_status
             }
           }
-      - name: Upload browser-only UI check screenshots
+      - name: Upload editor screenshots and native bridge checks
         if: always() && hashFiles('build/EditorScreenshots/**') != ''
         uses: actions/upload-artifact@v4
         with:
@@ -102,5 +132,13 @@ jobs:
         with:
           name: WUBROT-AudioComparisons-0.2.${{ github.run_number }}
           path: build/AudioComparisons/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Upload callback performance and baseline renders
+        if: always() && hashFiles('build/Performance/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-Performance-0.2.${{ github.run_number }}
+          path: build/Performance/
           retention-days: 90
           if-no-files-found: error

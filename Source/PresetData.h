@@ -59,6 +59,68 @@ inline bool readSpectrum(const juce::var &v, DnaSpectrum &s)
     s.prepareDerived();
     return true;
 }
+inline juce::var temporal(const DnaProfile &p)
+{
+    auto *object = new juce::DynamicObject();
+    object->setProperty("version", 2);
+    juce::Array<juce::var> frames;
+    for (std::size_t i = 0; i < p.spectralCount; ++i)
+    {
+        const auto &f = p.spectralFrames[i];
+        juce::Array<juce::var> values;
+        for (float v : f.bands)
+            values.add(v);
+        for (float v : f.features)
+            values.add(v);
+        for (float v : f.logPeaks)
+            values.add(v);
+        for (float v : f.resonance)
+            values.add(v);
+        for (float v : f.persistence)
+            values.add(v);
+        frames.add(values);
+    }
+    object->setProperty("frames", frames);
+    return object;
+}
+inline bool readTemporal(const juce::var &v, DnaProfile &p)
+{
+    if (!v.isObject() || int(v["version"]) != 2)
+        return false;
+    const auto *frames = v["frames"].getArray();
+    if (!frames || frames->isEmpty() || frames->size() > int(p.spectralCapacity))
+        return false;
+    for (int i = 0; i < frames->size(); ++i)
+    {
+        std::array<float, 26> values{};
+        if (!numbers((*frames)[i], values.data(), values.size(), 0, 10))
+            return false;
+        auto &f = p.spectralFrames[std::size_t(i)];
+        for (std::size_t j = 0; j < 12; ++j)
+        {
+            if (values[j] > 1)
+                return false;
+            f.bands[j] = values[j];
+        }
+        for (std::size_t j = 0; j < 5; ++j)
+        {
+            if (values[12 + j] > 1)
+                return false;
+            f.features[j] = values[12 + j];
+        }
+        for (std::size_t j = 0; j < 3; ++j)
+        {
+            f.logPeaks[j] = values[17 + j];
+            f.resonance[j] = values[20 + j];
+            f.persistence[j] = values[23 + j];
+            if (f.logPeaks[j] < 4.60517f || f.logPeaks[j] > 9.210341f || f.resonance[j] < 1.5f ||
+                f.resonance[j] > 6 || f.persistence[j] > 1)
+                return false;
+        }
+    }
+    p.spectralCount = std::size_t(frames->size());
+    return true;
+}
 inline juce::var profile(const DnaProfile &p)
 {
     auto *o = new juce::DynamicObject();
@@ -67,18 +129,20 @@ inline juce::var profile(const DnaProfile &p)
     o->setProperty("envelope", floats(p.envelope.data(), p.bins));
     o->setProperty("character", floats(p.character.data(), p.bins));
     o->setProperty("spectrum", spectrum(p.spectrum));
+    if(p.spectralCount>0)o->setProperty("temporal",temporal(p));
     return o;
 }
 inline bool readProfile(const juce::var &v, DnaProfile &p)
 {
     if (!v.isObject() || !v["valid"].isBool())
         return false;
+    p.spectralCount=0;
     p.valid = static_cast<bool>(v["valid"]);
     p.duration = static_cast<double>(v["duration"]);
     return std::isfinite(p.duration) && p.duration >= 0 && p.duration <= 30 && (!p.valid || p.duration > 0) &&
            numbers(v["envelope"], p.envelope.data(), p.bins, 0, 1) &&
            numbers(v["character"], p.character.data(), p.bins, 0, 1) &&
-           readSpectrum(v["spectrum"], p.spectrum);
+           readSpectrum(v["spectrum"], p.spectrum)&&(!v.hasProperty("temporal")||(p.valid&&readTemporal(v["temporal"],p)));
 }
 // Only analysis descriptors, never PCM, a wavetable, or a sound-playing buffer.
 struct Archive
@@ -89,7 +153,7 @@ struct Archive
     juce::var toVar() const
     {
         auto *o = new juce::DynamicObject();
-        o->setProperty("version", 1);
+        o->setProperty("version",full.spectralCount>0?2:1);
         o->setProperty("full", profile(full));
         juce::Array<juce::var> a;
         for (const auto &s : spectra)
@@ -100,9 +164,10 @@ struct Archive
     static std::shared_ptr<const Archive> fromVar(const juce::var &v)
     {
         auto p = std::make_shared<Archive>();
-        if (!v.isObject() || static_cast<int>(v["version"]) != 1 || !readProfile(v["full"], p->full) ||
+        if (!v.isObject() || (static_cast<int>(v["version"]) != 1&&static_cast<int>(v["version"])!=2) || !readProfile(v["full"], p->full) ||
             !p->full.valid)
             return {};
+        if((int(v["version"])==2)!=(p->full.spectralCount>0))return {};
         auto *a = v["slices"].getArray();
         if (!a || a->size() != slices)
             return {};
@@ -167,6 +232,7 @@ struct Archive
         }
         else
             p.spectrum = full.spectrum;
+        if(full.spectralCount>0){p.spectralCount=p.spectralCapacity;for(std::size_t i=0;i<p.spectralCount;++i)p.spectralFrames[i]=full.spectralAt(lo+(hi-lo)*float(i)/float(p.spectralCount-1));}
         p.valid = true;
         return p;
     }

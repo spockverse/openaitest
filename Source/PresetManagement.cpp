@@ -14,7 +14,7 @@ juce::String signature(const juce::ValueTree &s, const juce::String &dna)
         text += ":" + juce::String(static_cast<juce::int64>(
                           std::llround((v - lows[i]) / (highs[i] - lows[i]) * 100000.)));
     }
-    if(static_cast<int>(s.getProperty("xyMapping",1))==2)text+=":xy2";
+    if(static_cast<int>(s.getProperty("xyMapping",1))>=2)text+=":xy"+s["xyMapping"].toString();
     return text;
 }
 } // namespace
@@ -32,7 +32,7 @@ juce::String WubrotProcessor::soundSignature()
             ":" +
             juce::String(static_cast<juce::int64>(std::llround(
                 (values[static_cast<std::size_t>(i)]->load() - lows[i]) / (highs[i] - lows[i]) * 100000.)));
-    if(xyMapping.load()==2)text+=":xy2";
+    if(xyMapping.load()>=2)text+=":xy"+juce::String(xyMapping.load());
     return text;
 }
 void WubrotProcessor::markPresetClean()
@@ -73,6 +73,7 @@ juce::Result WubrotProcessor::capturePortableState(juce::ValueTree &state, juce:
             std::array<const float *, 8> channels{};
             for (int ch = 0; ch < snapshot->audio.getNumChannels(); ++ch)
                 channels[static_cast<std::size_t>(ch)] = snapshot->audio.getReadPointer(ch) + first;
+            if(snapshot->full.spectralCount>0){prepared->spectra[std::size_t(i)]=snapshot->full.spectralAt((i+.5f)/prepared->slices).toSpectrum();continue;}
             prepared->spectra[static_cast<std::size_t>(i)] =
                 DnaSpectrum::analyse(channels.data(), snapshot->audio.getNumChannels(),
                                      static_cast<std::size_t>(last - first), snapshot->rate);
@@ -89,6 +90,7 @@ juce::Result WubrotProcessor::capturePortableState(juce::ValueTree &state, juce:
     analysisArchive = archive;
     state = captureState(false);
     state.removeProperty("sourceWav", nullptr);
+    state.removeProperty("dnaTemporal",nullptr); // Included once in the exact presetProfile below.
     state.removeProperty("fullEnvelope", nullptr);
     state.removeProperty("editorSize", nullptr);
     auto reader = profiles.read();

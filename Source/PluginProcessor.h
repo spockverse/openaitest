@@ -38,7 +38,7 @@ public:
     void reportSampleError(const juce::String& message) { setStatus(message); }
     void serviceRegionEdit();
     bool isLoading() const noexcept { return loading.load(); }
-    juce::var uiState();
+    juce::var uiState(bool includeWaveform=true);
     double modulationPosition() const noexcept { return patternPosition.load(); }
     std::uint32_t audioVisualSequence() const noexcept { return visualReadout.sequence(); }
     float consumeAudioVisualLevel() noexcept { const auto v=visualReadout.consume(); return values[8]->load() >= .5f ? v : 0; }
@@ -90,7 +90,7 @@ private:
     std::array<float,DnaProfile::bins> fullEnvelope {};
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
-    std::atomic<int> xyMapping {2};
+    std::atomic<int> xyMapping {3};
     CrushDSP dsp;
     AudioReactivity visualAnalyser;
     AudioReactivityMailbox visualReadout;

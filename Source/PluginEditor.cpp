@@ -91,7 +91,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;waveformSent=false;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
     else if (type == "visualReady")
     {
         // The page has installed its listener AND applied its first power/state
@@ -136,8 +136,21 @@ void WubrotEditor::timerCallback()
     if(++uiTicks%3!=0)return;
     const auto revision=processor.presetLibraryRevision();
     if(lastCatalogueRevision!=revision){browser->emitEventIfBrowserIsVisible("wubrotPresetLibrary",processor.presetCatalogue());lastCatalogueRevision=revision;}
-    auto state = processor.uiState(); const auto json = juce::JSON::toString(state, true);
-    if (lastState != json) { lastState = json; browser->emitEventIfBrowserIsVisible("wubrotState", state); }
+    auto state = processor.uiState(false);
+    state.getDynamicObject()->removeProperty("playhead");
+    const auto json = juce::JSON::toString(state, true);
+    if (lastState != json)
+    {
+        lastState = json;
+        const auto waveRevision = state["waveformRevision"].toString();
+        if (!waveformSent || lastWaveformRevision != waveRevision)
+        {
+            state = processor.uiState(true);
+            lastWaveformRevision = state["waveformRevision"].toString();
+            waveformSent = true;
+        }
+        browser->emitEventIfBrowserIsVisible("wubrotState", state);
+    }
 }
 #else
 WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), processor(p), controls(p)

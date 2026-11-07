@@ -5,3 +5,5 @@
 /dist/
 /webview2/
 __pycache__/
+/benchmark-baseline-source/
+/benchmark-baseline-build/

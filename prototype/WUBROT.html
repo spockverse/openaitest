@@ -393,7 +393,7 @@ function createSolarCorona(){
 createSolarCorona();
 let renderer=new GelRenderer(surface);
 let liquid=!reduced, motion=!reduced, dragging=false, frameRequest=0, last=0, px=0, py=0, pointerTime=0,dirty=true,idleClock=0;
-let waveform=null, sharpness=0, sampleLoaded=false, loadVersion=0,displaySampleRate=44100,xyMapping=2;
+let waveform=null, sharpness=0, sampleLoaded=false, loadVersion=0,displaySampleRate=44100,nativeBits=16,nativeRate=44100;
 const nativeBackend=window.__JUCE__?.backend;
 let applyingNative=false,dnaMode=0,awaitingNativePower=!!nativeBackend;
 const shell=document.querySelector('.shell'),frozenSurface=document.createElement('canvas');
@@ -417,7 +417,7 @@ function nativeParameter(id,value){nativeEvent('parameter',{id,value});}
 function setDnaMode(mode,notify=true){dnaMode=mode===1?1:0;const toggle=$('regionLoop');toggle.dataset.mode=dnaMode;toggle.setAttribute('aria-checked',String(dnaMode===1));toggle.setAttribute('aria-label',dnaMode===0?'DNA mode: LOOP. Switch to RETRIGGER':'DNA mode: RETRIGGER. Switch to LOOP');if(notify){nativeEvent('gesture',{id:'mode',start:true});nativeParameter('mode',dnaMode);nativeEvent('gesture',{id:'mode',start:false});}}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function project(x,y){const len=Math.hypot(x,y);return len>1?{x:x/len,y:y/len}:{x,y};}
-function readouts(){const bits=xyMapping===2?16-14*Math.pow(Math.abs(px),.35):16-(px+1)*7,rate=xyMapping===2?displaySampleRate*Math.pow(500/displaySampleRate,Math.pow(Math.abs(py),.65)):500*Math.pow(displaySampleRate/500,(py+1)/2);$('bits').textContent=bits.toFixed(1);$('rate').textContent=(rate/1000).toFixed(1)+' kHz';$('position').textContent=`X ${Math.round((px+1)*50)} / Y ${Math.round((1-py)*50)}`;canvas.setAttribute('aria-description',`${bits.toFixed(1)} bits, ${(rate/1000).toFixed(1)} kilohertz`);}
+function readouts(){const bits=nativeBits,rate=nativeRate;$('bits').textContent=bits.toFixed(1);$('rate').textContent=(rate/1000).toFixed(1)+' kHz';$('position').textContent=`X ${Math.round((px+1)*50)} / Y ${Math.round((1-py)*50)}`;canvas.setAttribute('aria-description',`${bits.toFixed(1)} bits, ${(rate/1000).toFixed(1)} kilohertz`);}
 function setXY(x,y,excite=true,elapsed=1/30){
  const p=project(x,y);
  if(!awaitingNativePower&&engineIsOn()&&excite&&motion&&liquid){
@@ -592,29 +592,16 @@ async function loadSample(file){
  const version=++loadVersion;const drop=$('drop');drop.classList.remove('over');
  if(!file)return;
  if((!nativeBackend&&!/\.(wav|mp3)$/i.test(file.name))||file.size>20*1024*1024){$('sampleStatus').textContent='Choose a WAV or MP3 file smaller than 20 MB. Your previous DNA is unchanged.';drop.classList.remove('loading');drop.removeAttribute('aria-busy');return;}
- drop.classList.add('loading');drop.setAttribute('aria-busy','true');$('sampleStatus').textContent='Reading waveform DNA…';let ac;
+ drop.classList.add('loading');drop.setAttribute('aria-busy','true');$('sampleStatus').textContent='Reading waveform DNA…';
  try{
   const sampleBytes=await file.arrayBuffer();
 if(nativeBackend){
    const bytes=new Uint8Array(sampleBytes);let binary='';for(let offset=0;offset<bytes.length;offset+=8192)binary+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
    nativeEvent('sample',{name:file.name,base64:btoa(binary)});return;
   }
-  ac=new (window.AudioContext||window.webkitAudioContext)();
-  const buffer=await ac.decodeAudioData(sampleBytes);
-  if(version!==loadVersion)return;
-  const data=buffer.getChannelData(0),n=Math.min(data.length,Math.floor(buffer.sampleRate*30));
-  if(!n)throw Error('Empty sample');
-  const profile=new Float32Array(128);let peak=0,slope=0,energy=0,prev=0;
-  // Bound analysis work even for high-rate files: at most 65536 probes.
-  const stride=Math.max(1,Math.ceil(n/65536));
-  for(let i=0;i<n;i+=stride){const v=Number.isFinite(data[i])?data[i]:0;const b=Math.min(127,Math.floor(i/n*128));profile[b]=Math.max(profile[b],Math.abs(v));peak=Math.max(peak,Math.abs(v));slope+=Math.abs(v-prev);energy+=Math.abs(v);prev=v;}
-  if(peak>0)for(let i=0;i<128;i++)profile[i]/=peak;
-  waveform=profile;sharpness=energy>1e-8?clamp(slope/energy*.75,0,1):0;sampleLoaded=true;
-  $('filename').textContent=file.name.toUpperCase();$('texture').textContent='DNA / '+(sharpness>.55?'ANGULAR RIPPLES':'FLOWING RIPPLES');
-  $('sampleStatus').textContent=peak===0?'Silent sample: a calm field. Load another WAV for more texture.':`DNA loaded · ${Math.min(buffer.duration,30).toFixed(1)}s analysed · ${sharpness>.55?'edged, metallic ripple bias':'soft, flowing ripple bias'}.`;
-  drawWave();schedule();
+  $('sampleStatus').textContent='Sample analysis is available in the Windows plugin.';
  }catch(error){if(version===loadVersion)$('sampleStatus').textContent='Audio decoding failed. Try a standard PCM/float WAV or MP3. Previous DNA is unchanged.';}
- finally{if(ac)await ac.close().catch(()=>{});if(version===loadVersion){drop.classList.remove('loading');drop.removeAttribute('aria-busy');}}
+ finally{if(version===loadVersion){drop.classList.remove('loading');drop.removeAttribute('aria-busy');}}
 }
 function browseSample(){if(nativeBackend)nativeEvent('browse');else $('file').click();}
 $('sampleBrowse').onclick=e=>{e.stopPropagation();browseSample();};$('drop').onclick=browseSample;$('drop').onkeydown=e=>{if(e.target!==$('drop'))return;if(e.key==='Enter'||e.key===' '){e.preventDefault();browseSample();}};
@@ -641,7 +628,8 @@ if(nativeBackend){
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;let acknowledgeVisual=false;
   try{
-   if(state.xyMapping===1||state.xyMapping===2)xyMapping=state.xyMapping;
+   if(Number.isFinite(state.crushBitDepth))nativeBits=state.crushBitDepth;
+   if(Number.isFinite(state.crushSampleRate))nativeRate=state.crushSampleRate;
    const firstPower=awaitingNativePower&&Number.isFinite(state.enabled);
    if(!firstPower&&Number.isFinite(state.enabled))setEnginePower(state.enabled>=.5);
    if(!dragging&&Number.isFinite(state.x)&&Number.isFinite(state.y))setXY(state.x,state.y,true,1/20);
@@ -650,12 +638,12 @@ if(nativeBackend){
    if(!regionTouch&&Number.isFinite(state.regionStart)&&Number.isFinite(state.regionEnd)){regionLo=Math.min(state.regionStart,state.regionEnd);regionHi=Math.max(regionLo+.01,state.regionEnd);}
    if(typeof state.editable==='boolean')regionEditable=state.editable;paintRegion();
    if(!nativeTouches.has('dnaSpeed')&&Number.isInteger(state.dnaSpeed))setDnaSpeed(state.dnaSpeed);
-   updateRegionPosition(state.playhead);
+   if(Number.isFinite(state.playhead))updateRegionPosition(state.playhead);
    setDnaMode(state.mode,false);controls();
    if(Number.isFinite(state.sampleRate)&&state.sampleRate>=8000){displaySampleRate=state.sampleRate;readouts();}
    $('sampleStatus').textContent=state.status;$('sampleStatus').title=state.status;$('drop').classList.toggle('loading',!!state.loading);$('drop').setAttribute('aria-busy',String(!!state.loading));
    $('filename').textContent=state.name?(state.analysisOnly?'DNA ENVELOPE (ANALYSIS): ':regionEditable?'WAV LOADER (EDITING): ':'WAV LOADER: ')+state.name:'WAV LOADER: DROP YOUR SAMPLE';
-   if(Array.isArray(state.waveform)&&state.waveform.length===128){waveform=Float32Array.from(state.waveform);sampleLoaded=true;let roughness=0;for(let i=1;i<128;i++)roughness+=Math.abs(waveform[i]-waveform[i-1]);sharpness=Math.min(1,roughness/24);}else{waveform=null;sampleLoaded=false;sharpness=0;}
+   if(Object.prototype.hasOwnProperty.call(state,'waveform')){if(Array.isArray(state.waveform)&&state.waveform.length===128){waveform=Float32Array.from(state.waveform);sampleLoaded=true;let roughness=0;for(let i=1;i<128;i++)roughness+=Math.abs(waveform[i]-waveform[i-1]);sharpness=Math.min(1,roughness/24);}else{waveform=null;sampleLoaded=false;sharpness=0;}}
    drawWave();$('texture').textContent=(state.sampleRate/1000).toFixed(1)+' kHz / STEREO';window.wubrotPresetBrowser?.state(state.presets);
    if(firstPower){membrane.x=px;membrane.y=py;membrane.vx=membrane.vy=0;awaitingNativePower=false;setEnginePower(state.enabled>=.5,true);void shell.offsetWidth;shell.classList.remove('awaiting-engine-state');acknowledgeVisual=true;}
   }finally{applyingNative=false;}

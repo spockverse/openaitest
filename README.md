@@ -16,7 +16,13 @@ New instances open as **INIT**: MUTATE 100%, DRIVE 0 dB, no DNA, XY exactly cent
 
 Either horizontal direction progressively reduces bit depth; either vertical direction progressively reduces sample rate. Distance curves are continuous with no dry dead zone. The existing protected-sub quantizer range is calibrated so coarse bits still excite sine basses, and existing input-derived shaping/formants remain useful at DRIVE 0. A short centre blend, parameter smoothing and conservative wet gain compensation control transitions and peaks without a limiter or extra audio layer.
 
-**Existing projects, factory presets and old user presets retain their original XY mapping and sound.** New projects/presets save `xyMapping=2`; missing mapping metadata means the original mapping. To audition the centred behavior after upgrading, insert a genuinely fresh instance rather than reopening an old saved sound. Parameter IDs, ranges, automation, VST3 identity, region/speed/mode and source-independent DNA recall stay intact.
+**Existing projects, factory presets and old user presets retain their original XY mapping and sound.** New projects/presets save `xyMapping=3`; missing mapping metadata means the original mapping. To audition the centred behavior after upgrading, insert a genuinely fresh instance rather than reopening an old saved sound. Parameter IDs, ranges, automation, VST3 identity, region/speed/mode and source-independent DNA recall stay intact.
+
+## Signed XY regions and stronger temporal DNA
+
+Fresh instances use model 3: the same centred coordinates and distance curves, with continuous signed character weighting. Top-left favours defined crunch, top-right metallic destruction, bottom-left warmer grit, and bottom-right held robotic steps. This is one shared chain, not four switched effects. The dry centre, DRIVE-0 crushing, defaults, bypass and visual design stay intact.
+
+DNA adds normalized time-varying spectral shapes, persistent resonances, bandwidths and input-driven folding. Higher MUTATE makes the reference's character more pronounced without adding its audio or a generic oscillator. Original reference loudness does not become output gain. Source-region analysis stays on a worker; runtime caches and profile ownership are bounded. Models 1 and 2 retain their previous sounds for saved projects/presets. See [DSP_REFINEMENT.md](DSP_REFINEMENT.md) for the muffling diagnosis, processing/state details, cache-resolution tradeoff and measurement limits.
 
 ## Controls
 

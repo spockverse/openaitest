@@ -29,7 +29,7 @@ private:
     void timerCallback() override;
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;
-    juce::String lastState;
+    juce::String lastState,lastWaveformRevision;bool waveformSent=false;
     int lastCatalogueRevision=-1;
     int uiTicks=0;double lastPlayhead=-1;
     bool audioWasVisible=false;

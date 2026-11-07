@@ -37,6 +37,32 @@ public:
         }
         previous[static_cast<std::size_t>(channel)]=x;return y;
     }
+    // Oversample only the nonlinear residual. The original excitation is not
+    // low-passed or cross-mixed against its delayed, filtered copy.
+    float tickResidual(float x, int channel, float gain, float asymmetry, float edge, float amount,
+                       float cycles = 4) noexcept
+    {
+        auto &bank = filters[std::size_t(channel)];
+        float residual = 0;
+        gain = std::max(1.f, gain);
+        const float inverseGain=1/gain;
+        for (int k = 1; k <= 4; ++k)
+        {
+            float u = previous[std::size_t(channel)] + (x - previous[std::size_t(channel)]) * (k * .25f);
+            u = bank[1].tick(bank[0].tick(u));
+            const float input = u * gain, square = input * input,
+                        bent = input + asymmetry * square / (1 + square);
+            const float phaseInput=cycles*input;
+            // Cancel the folder's small-signal slope with a bounded term, not
+            // a delayed broadband gain copy. Keep only nonlinear harmonic change.
+            const float fold=std::sin(cycles*std::atan(input))-phaseInput/(1+phaseInput*phaseInput);
+            const float shape=bent/std::sqrt(1+bent*bent)+edge*.16f*fold;
+            float difference=shape*inverseGain-u;
+            residual = bank[3].tick(bank[2].tick(difference));
+        }
+        previous[std::size_t(channel)] = x;
+        return x + amount * residual;
+    }
 private:
     std::array<float,2> previous {};
     std::array<std::array<Lowpass,4>,2> filters {};

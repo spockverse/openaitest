@@ -1,3 +1,27 @@
+# Current signed-region and temporal-DNA audition
+
+All audio is synthetic, including the reference profiles. No user recordings or derivatives are included.
+
+Start with `regions-dry-synthetic-matched.wav`, then the four
+`regions-top-left-crunch-new-matched.wav`, `regions-top-right-metallic-new-matched.wav`,
+`regions-bottom-left-warm-new-matched.wav` and `regions-bottom-right-stepped-new-matched.wav`.
+Each uses the same bass and matched distance. Paired `-v037-matched.wav` files retain
+v0.2.37's original sound model. Matched files use 0.12 RMS across the whole file;
+the dry `regions-dry-synthetic.wav` also retains its original level for reference.
+
+Compare `dna-none-new-matched.wav` with the metallic/vowel/percussion `-new-matched.wav`
+files: identical incoming bass, DRIVE 0, MUTATE 100. Paired `-v037-matched.wav` files
+use the same source and analysis reference through the original model.
+`dna-vowel-M25`, `dna-vowel-speed0.5`, `dna-vowel-speed2`, and the first/last region
+files demonstrate lower mutation and temporal selection. Reference audio is never
+an additional audible layer. These are listening examples, not claims that subjective
+quality was established by numerical tests.
+
+`Regions-validation.txt` contains controlled comparison metrics. Native callback
+and editor-open/closed measurements are in the separate Performance artifact.
+
+# Retained earlier regression/audition files
+
 # Centred XY audition (new mapping)
 
 Start with `xy-centre-dry-synthetic-stabs.wav`: this is the unchanged synthetic input.

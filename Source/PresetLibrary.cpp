@@ -104,7 +104,7 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
     if(s.hasProperty("xyMapping"))
     {
         double version=0;
-        if(!number(s["xyMapping"],version)||(version!=1&&version!=2))
+        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3))
             return juce::Result::fail("Unsupported XY mapping version. Update WUBROT to load this preset.");
     }
     struct Bound
@@ -151,6 +151,8 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
     if (!s.hasProperty("presetProfile") ||
         !WubrotPresetData::readProfile(juce::JSON::parse(s["presetProfile"].toString()), active))
         return juce::Result::fail("Missing or corrupt active DNA profile.");
+    if(int(s.getProperty("xyMapping",1))>=3&&active.valid&&active.spectralCount==0)
+        return juce::Result::fail("Missing version-2 temporal DNA descriptors for this sound.");
     std::shared_ptr<const WubrotPresetData::Archive> archive;
     if (s.hasProperty("dnaArchive"))
     {
@@ -174,7 +176,7 @@ juce::Result PresetLibrary::read(const juce::File &f, juce::ValueTree &state, ju
     auto xml = juce::parseXML(text);
     if (!xml || !xml->hasTagName("WubrotPreset") || xml->getStringAttribute("plugin") != "WUBROT")
         return juce::Result::fail("This is not a compatible WUBROT preset.");
-    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2")
+    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2" && xml->getStringAttribute("formatVersion") != "3")
         return juce::Result::fail("Unsupported preset version. Update WUBROT to open this file.");
     name = xml->getStringAttribute("name");
     auto r = validName(name);
@@ -183,7 +185,7 @@ juce::Result PresetLibrary::read(const juce::File &f, juce::ValueTree &state, ju
     if (xml->getNumChildElements() != 1 || !xml->getFirstChildElement()->hasTagName("WubrotState"))
         return juce::Result::fail("The preset state is missing or malformed.");
     auto candidate = juce::ValueTree::fromXml(*xml->getFirstChildElement());
-    if((xml->getStringAttribute("formatVersion")=="2")!=(static_cast<int>(candidate.getProperty("xyMapping",1))==2))
+    if(xml->getIntAttribute("formatVersion")!=static_cast<int>(candidate.getProperty("xyMapping",1)))
         return juce::Result::fail("Preset container and XY mapping version do not agree.");
     r = validate(candidate);
     if (r.failed())
@@ -220,7 +222,7 @@ juce::Result PresetLibrary::write(const juce::File &f, const juce::ValueTree &st
         return juce::Result::fail(
             "A preset with that name already exists. Choose Overwrite or a different name.");
     juce::XmlElement xml("WubrotPreset");
-    xml.setAttribute("formatVersion", static_cast<int>(state.getProperty("xyMapping",1))==2?2:1);
+    xml.setAttribute("formatVersion", static_cast<int>(state.getProperty("xyMapping",1)));
     xml.setAttribute("plugin", "WUBROT");
     xml.setAttribute("name", name);
     xml.addChildElement(state.createXml().release());

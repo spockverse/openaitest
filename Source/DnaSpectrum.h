@@ -14,6 +14,7 @@ struct DnaSpectrum
     std::array<float,5> features {.2f,.5f,.5f,.3f,.3f};
     std::array<float,3> peaks {500,1400,2800};
     std::array<float,3> peakLevels {.5f,.5f,.5f};
+    std::array<float,3> resonances{2.2f,2.2f,2.2f};
     bool valid=false;
     void prepareDerived()noexcept
     {
@@ -97,6 +98,8 @@ struct DnaSpectrum
                     static_cast<float>(even+odd>1e-12?even/(even+odd):.5),
                     std::clamp((maximum/static_cast<float>(std::sqrt(energy/(windows*n)+1e-20))-1.4f)/6,0.0f,1.0f),
                     static_cast<float>(std::clamp(weighted/total/6000,0.0,1.0))};
+        // Widths of persistent resonances are independent of reference amplitude.
+        for(std::size_t b=0;b<3;++b){const auto k=std::clamp<std::size_t>(std::size_t(s.peaks[b]*n/sr),1,n/2-2);auto lo=k,hi=k;const auto half=power[k]*.5;while(lo>1&&power[lo-1]>half)--lo;while(hi+1<n/2&&power[hi+1]>half)++hi;const double width=std::max(1.0,double(hi-lo+1))*sr/n;s.resonances[b]=std::clamp(float(s.peaks[b]/width),1.5f,6.f);}
         s.valid=true;s.prepareDerived();return s;
     }
 };

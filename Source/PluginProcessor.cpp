@@ -56,7 +56,8 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     CrushDSP::Parameters p;
     const auto mappingVersion=xyMapping.load();
     const auto mapped=XYMapping::map(x,y,runningRate.load(),mappingVersion);
-    p.bits=mapped.bits;p.rate=mapped.rate;p.activity=mapped.activity;p.centered=mappingVersion==2;
+    p.bits=mapped.bits;p.rate=mapped.rate;p.activity=mapped.activity;p.centered=mappingVersion>=2;p.processingVersion=mappingVersion;
+    const float radius=std::max(1.f,std::hypot(x,y));p.signedX=x/radius;p.signedY=y/radius;
     p.mutate = values[2]->load() * .01f; p.drive = values[3]->load(); p.mode = static_cast<int>(values[4]->load());
     p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load(); p.enabled = values[8]->load() >= .5f;
     constexpr float speeds[]{.25f,.5f,1,2,4};p.speed=speeds[juce::jlimit(0,4,static_cast<int>(values[11]->load()))];
@@ -152,7 +153,7 @@ void WubrotProcessor::decodeSample(std::unique_ptr<juce::InputStream> stream, co
     const int frames = static_cast<int>(std::min(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 30)));
     juce::AudioBuffer<float> audio(static_cast<int>(reader->numChannels), frames);
     if (!reader->read(audio.getArrayOfWritePointers(), audio.getNumChannels(), 0, frames)) { setSampleStatus(token,"Audio decoding/read failed. Previous DNA is unchanged."); return; }
-    const auto profile = DnaProfile::analyse(audio.getArrayOfReadPointers(), audio.getNumChannels(), static_cast<std::size_t>(frames), reader->sampleRate);
+    const auto profile = DnaProfile::analyse(audio.getArrayOfReadPointers(), audio.getNumChannels(), static_cast<std::size_t>(frames), reader->sampleRate,xyMapping.load()>=3);
     if (!profile.valid) { setSampleStatus(token,"This WAV is silent. Previous DNA is unchanged."); return; }
     prepared->audio=std::move(audio);prepared->rate=reader->sampleRate;prepared->full=profile;
     const float start=values[9]->load(),end=values[10]->load();
@@ -171,7 +172,8 @@ DnaProfile WubrotProcessor::analyseRegion(const SampleSource& s,float start,floa
     const int first=juce::jlimit(0,s.audio.getNumSamples()-1,static_cast<int>(lo*s.audio.getNumSamples()));
     const int last=juce::jlimit(first+1,s.audio.getNumSamples(),static_cast<int>(hi*s.audio.getNumSamples()));
     std::array<const float*,8> channels{};for(int ch=0;ch<s.audio.getNumChannels();++ch)channels[static_cast<std::size_t>(ch)]=s.audio.getReadPointer(ch)+first;
-    return DnaProfile::analyse(channels.data(),s.audio.getNumChannels(),static_cast<std::size_t>(last-first),s.rate);
+    if(first==0&&last==s.audio.getNumSamples())return s.full;
+    return DnaProfile::analyse(channels.data(),s.audio.getNumChannels(),static_cast<std::size_t>(last-first),s.rate,s.full.spectralCount>0);
 }
 void WubrotProcessor::serviceRegionEdit()
 {
@@ -237,7 +239,7 @@ void WubrotProcessor::timerCallback()
     serviceRegionEdit();
     if (!loading.load()) { const int requested = presetRequest.exchange(-1); if (requested >= 0) loadFactoryPreset(requested); }
 }
-juce::var WubrotProcessor::uiState()
+juce::var WubrotProcessor::uiState(bool includeWaveform)
 {
     const juce::ScopedLock lock(metadataLock);
     auto object = std::make_unique<juce::DynamicObject>();
@@ -249,11 +251,16 @@ juce::var WubrotProcessor::uiState()
     const auto mapping=XYMapping::map(values[0]->load(),values[1]->load(),runningRate.load(),xyMapping.load());
     object->setProperty("crushBitDepth",mapping.bits);object->setProperty("crushSampleRate",mapping.rate);
     object->setProperty("sampleRate", runningRate.load()); object->setProperty("editorSize", editorSize.load());
-    auto p = profiles.read(); juce::Array<juce::var> wave;
-    if (const auto* profile = p.get(); profile && (profile->valid||source||analysisArchive||storedWav.getSize()>0))
-        for (std::size_t i = 0; i < 128; ++i) wave.add(source||analysisArchive||storedWav.getSize()>0?fullEnvelope[i*DnaProfile::bins/128]:profile->envelope[i * DnaProfile::bins / 128]);
+    juce::Array<juce::var> wave;
+    if(includeWaveform)
+    {
+        auto reader=profiles.read();
+        if(const auto* profile=reader.get();profile&&(profile->valid||source||analysisArchive||storedWav.getSize()>0))
+            for(std::size_t i=0;i<128;++i)wave.add(source||analysisArchive||storedWav.getSize()>0?fullEnvelope[i*DnaProfile::bins/128]:profile->envelope[i*DnaProfile::bins/128]);
+    }
     object->setProperty("editable",source!=nullptr||analysisArchive!=nullptr);object->setProperty("analysisOnly",source==nullptr&&analysisArchive!=nullptr);object->setProperty("playhead",patternPosition.load());
-    object->setProperty("waveform", wave);
+    object->setProperty("waveformRevision",dnaOriginKey);
+    if(includeWaveform)object->setProperty("waveform", wave);
     auto* preset=new juce::DynamicObject();preset->setProperty("name",activePresetName);preset->setProperty("file",activeUserFile);preset->setProperty("kind",activeUserFile.isNotEmpty()?"user":juce::StringArray{presetNames[0],presetNames[1],presetNames[2]}.contains(activePresetName)?"factory":"custom");preset->setProperty("dirty",hasUnsavedPresetChanges());preset->setProperty("busy",presetBusy.load());preset->setProperty("error",libraryError);preset->setProperty("result",presetResult);object->setProperty("presets",preset);
 
     return juce::var(object.release());
@@ -267,7 +274,7 @@ juce::ValueTree WubrotProcessor::captureState(bool includeSourceAudio)
     state.removeProperty("sourceWav",nullptr);state.removeProperty("fullEnvelope",nullptr);
     state.setProperty("dnaOriginKey",dnaOriginKey,nullptr);
     state.setProperty("presetDisplayName",activePresetName,nullptr);state.setProperty("presetUserFile",activeUserFile,nullptr);state.setProperty("presetBaseline",presetBaseline,nullptr);
-    state.removeProperty("dnaArchive",nullptr);state.removeProperty("presetProfile",nullptr);
+    state.removeProperty("dnaArchive",nullptr);state.removeProperty("presetProfile",nullptr);state.removeProperty("dnaTemporal",nullptr);
     if(analysisArchive)state.setProperty("dnaArchive",juce::JSON::toString(analysisArchive->toVar(),true),nullptr);
 
     if(includeSourceAudio&&storedWav.getSize()>0){state.setProperty("sourceWav",storedWav.toBase64Encoding(),nullptr);juce::Array<juce::var> full;for(auto v:fullEnvelope)full.add(v);state.setProperty("fullEnvelope",juce::JSON::toString(juce::var(full),true),nullptr);}
@@ -277,6 +284,7 @@ juce::ValueTree WubrotProcessor::captureState(bool includeSourceAudio)
         juce::Array<juce::var> data; for (auto value : profile->envelope) data.add(value);
         state.setProperty("envelope", juce::JSON::toString(juce::var(data), true), nullptr);
         state.setProperty("duration", profile->duration, nullptr);
+        if(profile->spectralCount>0)state.setProperty("dnaTemporal",juce::JSON::toString(WubrotPresetData::temporal(*profile),true),nullptr);
         juce::Array<juce::var> characterData; for (auto v : profile->character) characterData.add(v);
         state.setProperty("dnaCharacter", juce::JSON::toString(juce::var(characterData), true), nullptr);
         if(profile->spectrum.valid)
@@ -300,7 +308,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
-    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2")
+    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3")
     {setStatus("Unsupported XY mapping version. This project needs a newer WUBROT build.");return;}
     if (!state.getChildWithProperty("id", "enabled").isValid())
     {
@@ -344,9 +352,11 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
         profile.spectrum.valid=valid;
         if(valid)profile.spectrum.prepareDerived();
     }
+    if(state.hasProperty("dnaTemporal")&&(!profile.valid||!WubrotPresetData::readTemporal(juce::JSON::parse(state["dnaTemporal"].toString()),profile))){setStatus("Invalid temporal DNA state. Current sound preserved.");return;}
     std::shared_ptr<const WubrotPresetData::Archive> archive;
     if(state.hasProperty("dnaArchive"))archive=WubrotPresetData::Archive::fromVar(juce::JSON::parse(state["dnaArchive"].toString()));
     if(state.hasProperty("presetProfile")){DnaProfile exact;if(WubrotPresetData::readProfile(juce::JSON::parse(state["presetProfile"].toString()),exact))profile=exact;}
+    if(int(state.getProperty("xyMapping",1))>=3&&profile.valid&&profile.spectralCount==0){setStatus("Missing temporal DNA descriptors. Current sound preserved.");return;}
     const juce::ScopedLock lock(metadataLock); generation.fetch_add(1); presetRequest.store(-1);
     loading.store(false);regionJob.store(false);analysisArchive=archive;dnaOriginKey=archive?WubrotPresetData::key(archive->full):state.getProperty("dnaOriginKey",profile.valid?WubrotPresetData::key(profile):juce::String()).toString();updateDnaKey(profile);
     activePresetName=state.getProperty("presetDisplayName",getProgramName(juce::jlimit(0,2,static_cast<int>(state["preset"])))).toString();
@@ -356,7 +366,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto full=juce::JSON::parse(state["fullEnvelope"].toString());
     if(auto* array=full.getArray();array&&array->size()==static_cast<int>(DnaProfile::bins))for(std::size_t i=0;i<DnaProfile::bins;++i){const float v=static_cast<float>((*array)[static_cast<int>(i)]);fullEnvelope[i]=std::isfinite(v)?juce::jlimit(0.0f,1.0f,v):0;}
     storedWav.fromBase64Encoding(state["sourceWav"].toString());if(storedWav.getSize()>maxSampleBytes)storedWav.reset();
-    xyMapping.store(static_cast<int>(state.getProperty("xyMapping",1))==2?2:1);
+    xyMapping.store(juce::jlimit(1,3,static_cast<int>(state.getProperty("xyMapping",1))));
     parameters.replaceState(state); profiles.publish(profile);
     presetBaseline=state.getProperty("presetBaseline",soundSignature()).toString();
     analysedStart=static_cast<float>(state.getProperty("analysisStart",values[9]->load()));analysedEnd=static_cast<float>(state.getProperty("analysisEnd",values[10]->load()));

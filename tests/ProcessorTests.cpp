@@ -129,7 +129,7 @@ static void checkVisualObserver()
         require(processor.setBusesLayout(layout),"Observer test layout failed");
         processor.setParameterValue("x",-.25f);processor.setParameterValue("y",.4f);processor.setParameterValue("drive",13);processor.setParameterValue("mutate",0);
         processor.prepareToPlay(rate,blockSize);CrushDSP reference;reference.prepare(rate);
-        CrushDSP::Parameters target;const auto mapped=XYMapping::map(-.25f,.4f,rate);target.bits=mapped.bits;target.rate=mapped.rate;target.activity=mapped.activity;target.centered=true;target.drive=13;target.mutate=0;target.mix=1;target.output=0;target.protect=1;target.speed=1;target.mode=0;
+        CrushDSP::Parameters target;const float rx=processor.parameters.getRawParameterValue("x")->load(),ry=processor.parameters.getRawParameterValue("y")->load();const auto mapped=XYMapping::map(rx,ry,rate);target.processingVersion=3;target.signedX=rx;target.signedY=ry;target.bits=mapped.bits;target.rate=mapped.rate;target.activity=mapped.activity;target.centered=true;target.drive=13;target.mutate=0;target.mix=1;target.output=0;target.protect=1;target.speed=1;target.mode=0;
         float observedPeak=0;
         for(int block=0;block<32;++block)
         {
@@ -237,7 +237,7 @@ int main()
         axis.setParameterValue("y", -1); const auto top = render(axis);
         axis.setParameterValue("y", 1); const auto bottom = render(axis);
         auto steps = [](const std::vector<float>& audio) { int count = 0; for (std::size_t i = 1; i < audio.size(); ++i) if (std::abs(audio[i] - audio[i - 1]) > .01f) ++count; return count; };
-        require(top==bottom,"New XY sample-rate reduction must be symmetric above and below centre");
+        require(top!=bottom,"Signed vertical character did not distinguish directions");
         axis.setParameterValue("y",0);const auto centre=render(axis);require(steps(centre)>steps(bottom),"Both vertical extremes must reduce sample rate from centre");
         p.setCurrentProgram(2); require(p.getCurrentProgram() == 2, "host preset selection must acknowledge immediately"); juce::Thread::sleep(75); juce::Timer::callPendingTimersSynchronously();
         require(p.getNumPrograms() == 3, "factory preset count");
