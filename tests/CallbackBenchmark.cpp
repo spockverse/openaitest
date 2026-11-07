@@ -7,6 +7,9 @@
 #include <thread>
 #include <vector>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <psapi.h>
 #include <tlhelp32.h>
