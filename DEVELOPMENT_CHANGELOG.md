@@ -1,3 +1,11 @@
+# ROT DNA control refinement
+
+- Replaced the two speed step buttons (previously styled as small knobs) with one larger interactive stepped SPEED knob. Vertical dragging, Shift-drag precision, wheel, arrow keys, Home/End and double-click reset all edit the existing five-choice dnaSpeed parameter with host gestures. No parameter, ID, DSP or state-format changes.
+- Replaced the native speed select with a compact purple-black floating list: all five original values, keyboard navigation, outside/Escape dismissal, 170 ms transitions and reduced-motion support. Host automation and project/preset recall synchronize the knob, value and selected item without emitting feedback.
+- Removed the duplicate purple LOOP/RETRIGGER selector. The single cyan switch inside the waveform row now has a left LOOP / right RETRIGGER thumb and separately illuminated labels in the same cyan. Region nudge buttons retain their existing functionality.
+- Controls sit below START/END with compact explanatory text, retaining the main housing/control proportions. OFF uses the existing centralized power state and neutral unlit controls; controls remain functional while the field/playhead stay frozen.
+- Added Windows CI browser checks for all three sizes at 100/150/200% display scales, spacing/popup bounds, all speed values, precise dragging, wheel, keyboard, host gestures/automation, switch positions and powered-OFF interaction. Native audio/recall/VST3 checks remain separate; real FL Studio interaction requires Windows manual verification. No public release.
+
 # Master power visual shutdown
 
 - Existing enabled/power state now drives one centralized OFF material/lighting theme: dark neutral metals, extinguished logo/ROT DNA/control glows, an unlit power ring and ENGINE OFF status. The glossy field retains its detailed surface; no full-UI overlay or flat replacement circle.
