@@ -107,7 +107,10 @@ async function assertGesture(p) {
       const litColor = await p.locator('.mode-loop').evaluate(el => getComputedStyle(el).color);
       assert.equal(await p.locator('#regionLoop').getAttribute('aria-checked'), 'false');
       assert.equal(await p.locator('#regionLoop i').evaluate(el => getComputedStyle(el, ':after').transform), 'matrix(1, 0, 0, 1, 0, 0)');
-      await p.locator('#regionLoop').click(); await p.waitForTimeout(210);
+      await p.locator('#regionLoop').click();
+      // A busy Windows software renderer can present the final transition frame
+      // after a fixed sleep; observe completion rather than sampling mid-flight.
+      await p.waitForFunction(() => getComputedStyle(document.querySelector('#regionLoop i'), ':after').transform === 'matrix(1, 0, 0, 1, 16, 0)');
       assert.equal(await p.locator('#regionLoop').getAttribute('aria-checked'), 'true');
       assert.equal(await p.locator('.mode-retrigger').evaluate(el => getComputedStyle(el).color), litColor);
       assert.equal(await p.locator('#regionLoop i').evaluate(el => getComputedStyle(el, ':after').transform), 'matrix(1, 0, 0, 1, 16, 0)');
