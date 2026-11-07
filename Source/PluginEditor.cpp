@@ -23,7 +23,7 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
     const auto options = makeOptions();
     if (juce::WebBrowserComponent::areOptionsSupported(options))
     {
-        browser = std::make_unique<Browser>(options,processor); addAndMakeVisible(*browser);
+        browser = std::make_unique<Browser>(options,processor,[this]{frontendReady=false;visualBridgeReady=false;}); addAndMakeVisible(*browser);
         browser->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
         startTimerHz(60);
     }
@@ -91,7 +91,14 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "visualReady")
+    {
+        // The page has installed its listener AND applied its first power/state
+        // snapshot. Do not consume/send peaks into an unready WebView.
+        processor.consumeAudioVisualLevel();lastAudioSequence=processor.audioVisualSequence();
+        lastAudioLevel=-1;visualBridgeReady=true;
+    }
     else if (type == "sample")
     {
         const auto encoded = event["base64"].toString();
@@ -106,14 +113,15 @@ void WubrotEditor::handleEvent(const juce::var& event)
 void WubrotEditor::timerCallback()
 {
     if (!browser || !isShowing()) { audioWasVisible=false; return; }
-    if (!audioWasVisible) { processor.consumeAudioVisualLevel(); lastAudioSequence=processor.audioVisualSequence(); lastAudioLevel=-1; audioWasVisible=true; }
     applyEditorSize();
+    if(!frontendReady)return;
+    if (!audioWasVisible) { if(visualBridgeReady)processor.consumeAudioVisualLevel(); lastAudioSequence=processor.audioVisualSequence(); lastAudioLevel=-1; audioWasVisible=true; }
     const double position=processor.modulationPosition();
     if(std::abs(position-lastPlayhead)>1e-12){auto data=std::make_unique<juce::DynamicObject>();data->setProperty("position",position);browser->emitEventIfBrowserIsVisible("wubrotPlayhead",juce::var(data.release()));lastPlayhead=position;}
     // At most 30 compact visualization packets/s, only for newly processed
     // audio. The browser smoothly expires stale data if the host stops callbacks.
     const auto audioSequence=processor.audioVisualSequence();
-    if (uiTicks%2==0 && audioSequence!=lastAudioSequence)
+    if (visualBridgeReady && uiTicks%2==0 && audioSequence!=lastAudioSequence)
     {
         lastAudioSequence=audioSequence;
         const auto intensity=processor.consumeAudioVisualLevel();
@@ -121,7 +129,7 @@ void WubrotEditor::timerCallback()
         // the UI can distinguish sustain from an audio callback that stopped.
         if (intensity>0 || lastAudioLevel>0 || lastAudioLevel<0)
         {
-            auto data=std::make_unique<juce::DynamicObject>(); data->setProperty("intensity",intensity);
+            auto data=std::make_unique<juce::DynamicObject>(); data->setProperty("intensity",intensity);data->setProperty("sequence",static_cast<juce::int64>(audioSequence));
             browser->emitEventIfBrowserIsVisible("wubrotAudio",juce::var(data.release()));lastAudioLevel=intensity;
         }
     }

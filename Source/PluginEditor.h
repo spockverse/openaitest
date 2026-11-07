@@ -10,15 +10,17 @@ public:
     bool isInterestedInFileDrag(const juce::StringArray& files) override { return !files.isEmpty(); }
     void filesDropped(const juce::StringArray& files,int,int) override { if(!files.isEmpty())processor.loadSampleFile(juce::File(files[0])); }
 private:
+    friend class WubrotWebViewProbe;
     class Browser final : public juce::WebBrowserComponent, public juce::FileDragAndDropTarget
     {
     public:
-        explicit Browser(const Options& options,WubrotProcessor& p) : WebBrowserComponent(options),processor(p) {}
+        explicit Browser(const Options& options,WubrotProcessor& p,std::function<void()> navigating) : WebBrowserComponent(options),processor(p),navigationStarted(std::move(navigating)) {}
         bool isInterestedInFileDrag(const juce::StringArray& files) override { return !files.isEmpty(); }
         void filesDropped(const juce::StringArray& files,int,int) override { if(!files.isEmpty())processor.loadSampleFile(juce::File(files[0])); }
         WubrotProcessor& processor;
+        std::function<void()> navigationStarted;
         bool pageAboutToLoad(const juce::String& url) override
-        { return url == "about:blank" || url.startsWith(getResourceProviderRoot()); }
+        { const bool allowed=url == "about:blank" || url.startsWith(getResourceProviderRoot());if(allowed&&navigationStarted)navigationStarted();return allowed; }
         void newWindowAttemptingToLoad(const juce::String&) override {}
     };
     juce::WebBrowserComponent::Options makeOptions();
@@ -31,6 +33,8 @@ private:
     int lastCatalogueRevision=-1;
     int uiTicks=0;double lastPlayhead=-1;
     bool audioWasVisible=false;
+    bool frontendReady=false;
+    bool visualBridgeReady=false;
     std::uint32_t lastAudioSequence=0;
     float lastAudioLevel=-1;
     juce::Label error;

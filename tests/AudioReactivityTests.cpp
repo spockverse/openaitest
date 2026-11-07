@@ -67,6 +67,13 @@ int main(int argc,char** argv)
         }
         for(std::size_t i=0;i<hits.size();++i)require(hits[i]>.4f&&valleys[i]<hits[i]*.2f,"Mid-heavy rhythmic notes did not produce distinct corresponding pulses");
         std::cout<<"Four mid-heavy rhythmic impacts and intervening decay passed\n";
+        for(const float frequency:{65,400,1200})
+        {
+            AudioReactivity compressed;compressed.prepare(48000);std::array<float,8> hits {};
+            for(int i=0;i<96000;++i){const float t=i/48000.0f,part=(i%12000)/48000.0f;const float envelope=part<.17f?1.0f:.58f;const float v=.45f*envelope*(std::sin(t*6.2831853f*frequency)>0?1.0f:-1.0f);const float frame[]{v,-v};compressed.observe(frame,2);if(part<.12f)hits[static_cast<std::size_t>(i/12000)]=std::max(hits[static_cast<std::size_t>(i/12000)],compressed.level());}
+            for(const auto hit:hits)require(hit>.35f,"Compressed bass lost later hits beneath its held/background envelope");
+            std::cout<<"Compressed "<<frequency<<" Hz hits:";for(const auto hit:hits)std::cout<<' '<<hit;std::cout<<'\n';
+        }
         if(argc>1)
         {
             // Synthetic kick only: native detector telemetry for the browser replay.

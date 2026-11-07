@@ -20,6 +20,7 @@ public:
         lowPass = {pole(180),pole(700),pole(2500)};
         attack = envelope(.002); release = envelope(.022);
         backgroundAttack = envelope(.055); backgroundRelease = envelope(.15);
+        riseCoefficient = envelope(.018);
         pulseDecay = 1.0f - envelope(.055);
         guardSamples = static_cast<int>(sr * .065);
         attackSamples = static_cast<int>(sr * .012);
@@ -27,7 +28,7 @@ public:
     }
     void reset() noexcept
     {
-        channels = {}; fast = {}; slow = {}; wide = pulse = peak = value = 0;
+        channels = {}; fast = {}; slow = {}; shortBand = {}; wide = pulse = peak = value = 0;
         guard = attackWindow = 0; armed = true;
     }
     void observe(const float* input, int count) noexcept
@@ -49,12 +50,14 @@ public:
         }
         wide += (raw > wide ? attack : release) * (raw - wide);
         constexpr std::array<float,3> weights {.50f,.35f,.20f};
-        float energy=0,novel=0;
+        float energy=0,novel=0,flux=0;
         for(std::size_t b=0;b<3;++b)
         {
             fast[b] += (bandPeak[b] > fast[b] ? attack : release) * (bandPeak[b] - fast[b]);
             slow[b] += (fast[b] > slow[b] ? backgroundAttack : backgroundRelease) * (fast[b] - slow[b]);
             energy += weights[b]*fast[b];
+            shortBand[b] += riseCoefficient*(fast[b]-shortBand[b]);
+            flux += weights[b]*std::max(0.0f,fast[b]-shortBand[b]);
             // Per-band novelty also catches new growl/vowel articulation over a
             // held fundamental, without a free-running beat or transport clock.
             novel += weights[b]*std::max(0.0f,fast[b]-slow[b]*1.35f);
@@ -62,9 +65,13 @@ public:
         constexpr float floor = .00003f;
         const float focus = std::clamp((energy / (wide + floor) - .035f) / .30f, 0.0f, 1.0f);
         const float novelty=novel/(energy+floor);
+        const float rise=flux/(energy+floor);
         if (guard > 0) --guard;
-        if (novelty < .07f || energy < floor) armed = true;
-        if (armed && guard == 0 && energy > floor && novelty > .24f && focus > .12f)
+        if ((novelty < .07f && rise < .045f) || energy < floor) armed = true;
+        // Compressed notes can attack below the long-term background level.
+        // Short-term positive flux catches those rises without retriggering on
+        // steady low-frequency cycles (covered down to 35 Hz in tests).
+        if (armed && guard == 0 && energy > floor && (novelty > .24f || rise > .13f) && focus > .12f)
         {
             armed = false; guard = guardSamples; attackWindow = attackSamples;
         }
@@ -72,7 +79,7 @@ public:
         if (attackWindow > 0)
         {
             --attackWindow;
-            const auto contrast = std::clamp(novelty * 1.4f, 0.0f, 1.0f);
+            const auto contrast = std::clamp(std::max(novelty*1.4f,(rise-.08f)*3.8f), 0.0f, 1.0f);
             pulse = std::max(pulse, contrast * focus);
         }
         if (pulse < .0001f) pulse = 0;
@@ -87,8 +94,8 @@ public:
 private:
     struct Channel { float dc=0, low1=0, low2=0; };
     std::array<std::array<Channel,3>, 2> channels {};
-    std::array<float,3> highPass {},lowPass {},fast {},slow {};
-    float attack=0, release=0, backgroundAttack=0, backgroundRelease=0, pulseDecay=0;
+    std::array<float,3> highPass {},lowPass {},fast {},slow {},shortBand {};
+    float attack=0, release=0, backgroundAttack=0, backgroundRelease=0, pulseDecay=0,riseCoefficient=0;
     float wide=0, pulse=0, peak=0, value=0;
     int guardSamples=0, attackSamples=0, guard=0, attackWindow=0;
     bool armed=true;

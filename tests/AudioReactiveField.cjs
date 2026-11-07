@@ -7,6 +7,7 @@ const trace = JSON.parse(fs.readFileSync(tracePath, 'utf8'));
 const followerSource = html.match(/<script id="audio-reactive-visual">([\s\S]*?)<\/script>/)[1];
 const Follower = vm.runInNewContext(followerSource + ';AudioReactiveVisual');
 const follower = new Follower();
+follower.receive(1,0);follower.receive(0,2);assert(follower.advance(1/60,16)>.5,'A quiet packet erased an impact before the next frame');follower.reset();
 for(let i=0;i<100;i++) assert.equal(follower.advance(1/60,i*1000/60),0);
 follower.receive(1,0); assert(follower.advance(.016,16)>.5);
 for(let i=1;i<60;i++) follower.advance(1/60,i*1000/60);
@@ -23,6 +24,7 @@ async function open(b,width,height,fallback=false){
     window.__JUCE__={backend:{addEventListener:(id,f)=>listeners[id]=f,emitEvent:(id,data)=>{messages.push(data);if(data.type==='ready')listeners.wubrotState(state);}}};
   },fallback);
   await p.setContent(html);await p.waitForFunction(()=>jelly.complete&&jelly.naturalWidth&&renderer.ready||jelly.complete&&jelly.naturalWidth&&!renderer.gl);
+  assert.equal(await p.evaluate(()=>messages.filter(m=>m.type==='visualReady').length),1,'Frontend did not acknowledge installed listeners/initial power state');
   return {p,errors};
 }
 (async()=>{
@@ -36,24 +38,27 @@ async function open(b,width,height,fallback=false){
         // Isolate approved material pixels; GridDeformation separately checks
         // the intentionally relocated targeting marks with grid ink enabled.
         const read=(r,gain=0,light=gain)=>{r.render(jelly,gel,2.75,1,gain,light,0);const v=new Uint8Array(640*640*4);r.gl.readPixels(0,0,640,640,r.gl.RGBA,r.gl.UNSIGNED_BYTE,v);return v;};
-        let baselineDelta=0,changed=0,lightLift=0,alphaDelta=0;
+        let baselineDelta=0,changed=0,lightLift=0,alphaDelta=0,geometryMean=0;
         for(const[x,y]of[[0,0],[.72,-.4],[-1,0],[0,1]]){
           setXY(x,y);cancelAnimationFrame(frameRequest);frameRequest=0;membrane.x=px-.03;membrane.y=py+.02;gel.advance(.02);
           const original=read(old),zero=read(renderer),surge=read(renderer,1,0),lit=read(renderer,0,1);
-          let lightTotal=0;
+          let lightTotal=0,geometryTotal=0;
           for(let i=0;i<original.length;i++){
             baselineDelta=Math.max(baselineDelta,Math.abs(original[i]-zero[i]));
             if(i%4===3){alphaDelta=Math.max(alphaDelta,Math.abs(zero[i]-surge[i]));continue;}
             if(zero[i]!==surge[i])changed++;
+            geometryTotal+=Math.abs(surge[i]-zero[i]);
             lightTotal+=lit[i]-zero[i];
           }
           lightLift=Math.max(lightLift,lightTotal/(640*640*3));
+          geometryMean=Math.max(geometryMean,geometryTotal/(640*640*3));
         }
         setXY(.3,-.2);gel.reset();membrane.x=px;membrane.y=py;cancelAnimationFrame(frameRequest);frameRequest=0;
-        return{baselineDelta,changed,lightLift,alphaDelta};
+        return{baselineDelta,changed,lightLift,alphaDelta,geometryMean};
       });
       assert.equal(metrics.baselineDelta,0,'Silence changed the previous shader render');
       assert(metrics.changed>10000,'Gain did not intensify existing surface deformation');
+      assert(metrics.geometryMean>.8,'Ripple intensity changed too few visible pixels');
       assert(metrics.lightLift>.1&&metrics.lightLift<12,'Reflection response missing or excessive');
       assert.equal(metrics.alphaDelta,0,'Reactive deformation changed circular boundaries');
       let peak=0;
@@ -76,7 +81,7 @@ async function open(b,width,height,fallback=false){
       await p.locator('#motion').click();await p.waitForTimeout(50);await p.evaluate(()=>listeners.wubrotAudio({intensity:1}));assert.equal(await p.evaluate(()=>audioVisual.value),0);
       await p.locator('#motion').click();
       if(process.env.WUBROT_SCREENSHOTS){await p.evaluate(()=>{audioVisual.receive(1,performance.now());});await p.waitForTimeout(40);await p.screenshot({path:path.join(process.env.WUBROT_SCREENSHOTS,`audio-reactive-${width}.png`)});}
-      assert.deepEqual(errors,[]);console.log(width,'grid-disabled v031 material pixels identical; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
+      assert.deepEqual(errors,[]);console.log(width,'grid-disabled v031 material pixels identical; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'geometry pixel delta',metrics.geometryMean.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
     }
     const{p,errors}=await open(b,804,697,true);
     const fallback=await p.evaluate(()=>{cancelAnimationFrame(frameRequest);frameRequest=0;idleClock=2.75;audioVisual.reset();paint(true);const zero=Array.from(fallbackPoints);audioVisual.value=1;paint(true);let delta=0;for(let i=0;i<zero.length;i++)delta+=Math.abs(zero[i]-fallbackPoints[i]);return{delta,gpu:!!renderer.gl};});

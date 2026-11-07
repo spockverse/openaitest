@@ -19,6 +19,16 @@ jobs:
         run: python tools/validate_factory.py --allow-missing
       - name: Install pinned WebView2 SDK
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -OutputDirectory webview2 -NonInteractive
+      - name: Ensure runtime for actual native WebView2 test
+        shell: pwsh
+        run: |
+          $task_runtime_paths = @("${env:ProgramFiles(x86)}/Microsoft/EdgeWebView/Application/*/msedgewebview2.exe", "$env:LOCALAPPDATA/Microsoft/EdgeWebView/Application/*/msedgewebview2.exe")
+          $task_runtime = Get-ChildItem -Path $task_runtime_paths -ErrorAction SilentlyContinue
+          if (-not $task_runtime) {
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile "$env:RUNNER_TEMP/WebView2Runtime.exe"
+            $task_install = Start-Process "$env:RUNNER_TEMP/WebView2Runtime.exe" -ArgumentList '/silent','/install' -Wait -PassThru
+            if ($task_install.ExitCode -ne 0) { throw "WebView2 test runtime installation failed: $($task_install.ExitCode)" }
+          }
       - name: Configure x64 plugin
         shell: pwsh
         run: |
@@ -73,7 +83,7 @@ jobs:
             }
           }
       - name: Upload browser-only UI check screenshots
-        if: always() && hashFiles('build/EditorScreenshots/*.png') != ''
+        if: always() && hashFiles('build/EditorScreenshots/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: WUBROT-UI-Checks-0.2.${{ github.run_number }}

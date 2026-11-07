@@ -203,11 +203,14 @@ class GelPhysics {
 <script id="audio-reactive-visual">
 class AudioReactiveVisual {
  constructor(){this.reset();}
- reset(){this.value=0;this.target=0;this.received=-Infinity;}
- receive(intensity,now){if(!Number.isFinite(intensity))return;this.target=Math.max(0,Math.min(1,intensity));this.received=now;}
+ reset(){this.value=0;this.target=0;this.pendingPeak=0;this.received=-Infinity;}
+ receive(intensity,now){if(!Number.isFinite(intensity))return;this.target=Math.max(0,Math.min(1,intensity));this.pendingPeak=Math.max(this.pendingPeak,this.target);this.received=now;}
  advance(dt,now){
   // Expire stopped/hidden-host telemetry; never latch a last loud callback.
-  const target=now-this.received<=120?this.target:0;
+  // JUCE/WebView can deliver several packets before a render frame. Preserve
+  // their strongest impact until that frame consumes it, instead of letting a
+  // following quiet packet erase the hit before it was ever drawn.
+  const target=now-this.received<=120?Math.max(this.target,this.pendingPeak):0;this.pendingPeak=0;
   const tau=target>this.value?.012:.035;
   this.value+=(target-this.value)*(1-Math.exp(-Math.max(0,Math.min(.05,dt))/tau));
   if(target===0&&this.value<.001)this.value=0;
@@ -239,17 +242,24 @@ class GelRenderer {
     uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;uniform float reactiveGain;uniform float reactiveLight;uniform float gridAmount;
     float gridPixel(float v){return ${derivatives?'max(length(vec2(dFdx(v),dFdy(v))),.0001)':'1.'};}
     float gridStroke(float distance,float pixel,float width){return clamp(.5+.5*width-distance/pixel,0.,1.);}
-    float targetingInk(vec2 material){
-     // Markings live in the SAME sampled material UV as the reflective artwork.
-     // Convert only units: at neutral XY these retain the original design radii.
-     vec2 g=(material-.5)*(640.*.4671875/.435);
-     float r=length(g),pr=gridPixel(r),px=gridPixel(g.x),py=gridPixel(g.y);
+    vec2 gridPosition(vec2 p,vec2 displacement){
+     float falloff=exp(-dot(p-anchor,p-anchor)/.045);
+     vec2 bend=displacement*.28*falloff;
+     bend*=.0078125/(.0078125+length(bend));
+     return p-bend;
+    }
+    float targetingInk(vec2 p,vec2 displacement){
+     // Use the existing displacement, limited to five design pixels locally;
+     // keep the four circles recognizable even at the circular boundary.
+     vec2 axes=gridPosition(p,displacement)*640.;
+     vec2 g=axes-anchor*640.;
+     float r=length(g),pr=gridPixel(r),px=gridPixel(axes.x),py=gridPixel(axes.y);
      float rings=max(max(gridStroke(abs(r-103.),pr,.8),gridStroke(abs(r-167.),pr,.8)),gridStroke(abs(r-238.),pr,.8))*.47;
      rings=max(rings,gridStroke(abs(r-205.),pr,1.7)*.69);
-     float horizontal=gridStroke(abs(g.y),py,.8)*(1.-smoothstep(294.,296.,abs(g.x)));
-     float vertical=gridStroke(abs(g.x),px,.8)*(1.-smoothstep(294.,296.,abs(g.y)));
+     float horizontal=gridStroke(abs(axes.y),py,.8)*(1.-smoothstep(294.,296.,abs(axes.x)));
+     float vertical=gridStroke(abs(axes.x),px,.8)*(1.-smoothstep(294.,296.,abs(axes.y)));
      float guides=max(horizontal,vertical)*.50;
-     vec2 dotDelta=vec2(abs(g.x),abs(g.y));
+     vec2 dotDelta=abs(axes);
      float dots=min(length(dotDelta-vec2(295.,0.)),length(dotDelta-vec2(0.,295.)));
      return max(max(rings,guides),gridStroke(dots,gridPixel(dots),3.));
     }
@@ -275,15 +285,20 @@ class GelRenderer {
      idle+=vec2(sin(p.y*19.+idleTime*.64),cos(p.x*17.-idleTime*.71))*.002;
      float locality=exp(-distanceToOrb*distanceToOrb/.07);
      vec2 tension=materialLag*locality*1.5;
-     vec2 refraction=(normal*.055+slosh+tension+idle*idleAmount)*edge*contact*(1.+reactiveGain*.55);
+     vec2 refraction=(normal*.055+slosh+tension+idle*idleAmount)*edge*contact;
+     // Intensify existing ripples only, not the orb's bulk stretch/tension.
+     // A smooth six-pixel limit prevents audio from producing long streaks.
+     vec2 audioPush=(normal*.055+idle*idleAmount)*edge*contact*reactiveGain*1.45;
+     audioPush*=.009375/(.009375+length(audioPush));
+     refraction+=audioPush;
      vec2 source=.5+mapped*.435-refraction;
      vec3 colour=texture2D(artwork,clamp(source,vec2(0.),vec2(1.))).rgb;
      float light=(clamp(dot(normal,vec2(-.7,-.5)),-.5,.5)+cos(phase)*.10*idleAmount)*edge;
      colour=colour*(1.+light*.35)+vec3(.08,.025,.1)*max(0.,light);
-     colour*=1.+reactiveLight*.16*locality*edge;
+     colour*=1.+reactiveLight*.26*locality*edge;
      float rim=smoothstep(.455,.463,radius)*(1.-smoothstep(.464,.4671875,radius));
      colour+=vec3(.30,.10,.43)*rim*(.5+.5*sin(atan(p.y,p.x)*3.+.8));
-     if(gridAmount>0.)colour=mix(colour,vec3(.91,.89,.95),targetingInk(source)*gridAmount);
+     if(gridAmount>0.)colour=mix(colour,vec3(.91,.89,.95),targetingInk(p,refraction)*gridAmount);
      gl_FragColor=vec4(colour,alpha);
     }
    `);
@@ -448,17 +463,22 @@ canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=p
 const membrane={x:0,y:0,vx:0,vy:0};
 const audioVisual=new AudioReactiveVisual();
 const fallbackGrid=8,fallbackSectors=64,fallbackPoints=new Float32Array(9*65*2),fallbackSources=new Float32Array(9*65*2);
-let fallbackArtwork=null,fallbackMarkedArtwork=null;
-function paintFallbackWaves(grid=true){
- if(!fallbackArtwork){
-  fallbackArtwork=document.createElement('canvas');fallbackArtwork.width=fallbackArtwork.height=640;fallbackArtwork.getContext('2d').drawImage(jelly,6,6,628,628);
-  fallbackMarkedArtwork=document.createElement('canvas');fallbackMarkedArtwork.width=fallbackMarkedArtwork.height=640;
-  const gc=fallbackMarkedArtwork.getContext('2d'),scale=.435*628/299;
-  gc.drawImage(fallbackArtwork,0,0);gc.save();gc.translate(320,320);gc.scale(scale,scale);
-  for(const radius of [103,167,205,238]){gc.beginPath();gc.arc(0,0,radius,0,Math.PI*2);gc.strokeStyle=radius===205?'rgba(232,227,242,.69)':'rgba(232,227,242,.47)';gc.lineWidth=radius===205?1.7:.8;gc.stroke();}
-  gc.strokeStyle='rgba(232,227,242,.50)';gc.lineWidth=.8;gc.beginPath();gc.moveTo(-295,0);gc.lineTo(295,0);gc.moveTo(0,-295);gc.lineTo(0,295);gc.stroke();
-  for(const [x,y]of[[-295,0],[295,0],[0,-295],[0,295]]){gc.fillStyle='rgba(232,227,242,1)';gc.beginPath();gc.arc(x,y,1.5,0,Math.PI*2);gc.fill();}gc.restore();
- }
+let fallbackArtwork=null;
+const fallbackShift=new Float64Array(2);
+function fallbackDisplacement(dx,dy){
+ const radius=Math.hypot(dx,dy)/640,edge=Math.max(0,1-Math.pow(radius/.4671875,4));
+ const lx=dx-px*270,ly=dy-py*270,r=Math.hypot(lx,ly)/640;
+ const amount=motion&&liquid?(Math.sin(r*28-idleClock*3.2)*.010+Math.sin(r*19+idleClock*1.7)*.0045)*640*edge:0;
+ const contact=1-Math.exp(-r*r/.0025),lag=Math.exp(-r*r/.07)*edge*contact;
+ const baseX=lx/Math.max(r*640,16)*amount*contact,baseY=ly/Math.max(r*640,16)*amount*contact;
+ let audioX=baseX*audioVisual.value*1.45,audioY=baseY*audioVisual.value*1.45;
+ const limit=6/(6+Math.hypot(audioX,audioY));audioX*=limit;audioY*=limit;
+ fallbackShift[0]=baseX+(membrane.x-px)*270*lag+gel.x*640*edge*contact+audioX;
+ fallbackShift[1]=baseY+(membrane.y-py)*270*lag+gel.y*640*edge*contact+audioY;
+ return fallbackShift;
+}
+function paintFallbackWaves(){
+ if(!fallbackArtwork){fallbackArtwork=document.createElement('canvas');fallbackArtwork.width=fallbackArtwork.height=640;fallbackArtwork.getContext('2d').drawImage(jelly,6,6,628,628);}
  const n=fallbackGrid,sectors=fallbackSectors,ax=px*270/299,ay=py*270/299;
  for(let y=0;y<=n;y++)for(let x=0;x<=sectors;x++){
   const angle=x/sectors*Math.PI*2,bx=Math.cos(angle),by=Math.sin(angle);
@@ -467,13 +487,7 @@ function paintFallbackWaves(grid=true){
   const qx=((bx-ax)*ir+(by-ay)*ii)/id*y/n,qy=((by-ay)*ir-(bx-ax)*ii)/id*y/n;
   const nx=qx+ax,ny=qy+ay,dr=1+ax*qx+ay*qy,di=ax*qy-ay*qx,den=dr*dr+di*di;
   let dx=(nx*dr+ny*di)/den*299,dy=(ny*dr-nx*di)/den*299;
-  const radius=Math.hypot(dx,dy)/640,edge=Math.max(0,1-Math.pow(radius/.4671875,4));
-  const lx=dx-px*270,ly=dy-py*270,r=Math.hypot(lx,ly)/640;
-  const amount=motion&&liquid?(Math.sin(r*28-idleClock*3.2)*.010+Math.sin(r*19+idleClock*1.7)*.0045)*640*edge:0;
-  const gain=1+audioVisual.value*.55;
-  const contact=1-Math.exp(-r*r/.0025),lag=Math.exp(-r*r/.07)*edge*contact;
-  dx+=(lx/Math.max(r*640,16)*amount*contact+(membrane.x-px)*270*lag+gel.x*640*edge*contact)*gain;
-  dy+=(ly/Math.max(r*640,16)*amount*contact+(membrane.y-py)*270*lag+gel.y*640*edge*contact)*gain;
+  const shift=fallbackDisplacement(dx,dy);dx+=shift[0];dy+=shift[1];
   const i=(y*(sectors+1)+x)*2;fallbackPoints[i]=320+dx;fallbackPoints[i+1]=320+dy;
   fallbackSources[i]=320+qx*.435*628;fallbackSources[i+1]=320+qy*.435*628;
  }
@@ -486,13 +500,20 @@ function paintFallbackWaves(grid=true){
   // Slightly overlap the clips to avoid hairline cracks between warped triangles.
   const mx=(x0+x1+x2)/3,my=(y0+y1+y2)/3;
   ctx.save();ctx.beginPath();ctx.moveTo(mx+(x0-mx)*1.015,my+(y0-my)*1.015);ctx.lineTo(mx+(x1-mx)*1.015,my+(y1-my)*1.015);ctx.lineTo(mx+(x2-mx)*1.015,my+(y2-my)*1.015);ctx.closePath();ctx.clip();
-  ctx.transform(a,b,c,d,x0-a*u0-c*v0,y0-b*u0-d*v0);ctx.drawImage(grid?fallbackMarkedArtwork:fallbackArtwork,0,0);ctx.restore();
+  ctx.transform(a,b,c,d,x0-a*u0-c*v0,y0-b*u0-d*v0);ctx.drawImage(fallbackArtwork,0,0);ctx.restore();
  }
  for(let y=0;y<n;y++)for(let x=0;x<sectors;x++){
   const i=(y*(sectors+1)+x)*2,right=i+2,down=i+(sectors+1)*2,diagonal=down+2;
   const tri=(a,b,c)=>triangle(a,b,c,fallbackSources[a],fallbackSources[a+1],fallbackSources[b],fallbackSources[b+1],fallbackSources[c],fallbackSources[c+1]);
   tri(i,right,down);tri(right,diagonal,down);
  }
+}
+function paintFallbackGuides(){
+ const point=(x,y)=>{const d=fallbackDisplacement(x-320,y-320),falloff=Math.exp(-((x-320-px*270)**2+(y-320-py*270)**2)/(640*640*.045));let bx=d[0]*.28*falloff,by=d[1]*.28*falloff;const limit=5/(5+Math.hypot(bx,by));return [x+bx*limit,y+by*limit];};
+ ctx.save();ctx.beginPath();ctx.arc(320,320,299,0,Math.PI*2);ctx.clip();
+ for(const radius of[103,167,205,238]){ctx.beginPath();for(let i=0;i<=192;i++){const a=i/192*Math.PI*2,p=point(320+px*270+Math.cos(a)*radius,320+py*270+Math.sin(a)*radius);i?ctx.lineTo(...p):ctx.moveTo(...p);}ctx.strokeStyle=radius===205?'rgba(232,227,242,.69)':'rgba(232,227,242,.47)';ctx.lineWidth=radius===205?1.7:.8;ctx.stroke();}
+ ctx.strokeStyle='rgba(232,227,242,.50)';ctx.lineWidth=.8;for(const vertical of[false,true]){ctx.beginPath();for(let i=0;i<=128;i++){const v=25+i/128*590,p=point(vertical?320:v,vertical?v:320);i?ctx.lineTo(...p):ctx.moveTo(...p);}ctx.stroke();}
+ for(const[x,y]of[[25,320],[615,320],[320,25],[320,615]]){const p=point(x,y);ctx.fillStyle='rgba(232,227,242,1)';ctx.beginPath();ctx.arc(...p,1.5,0,Math.PI*2);ctx.fill();}ctx.restore();
 }
 function paint(fallback,grid=true){
  const w=640,c=320,r=299;ctx.clearRect(0,0,w,w);
@@ -501,10 +522,11 @@ function paint(fallback,grid=true){
   ctx.save();ctx.beginPath();ctx.arc(c,c,299,0,Math.PI*2);ctx.clip();
   // Lift the existing material itself; no extra lighting/ripple overlay.
   if(engineIsOn()&&audioVisual.value>0)ctx.filter=`brightness(${1+audioVisual.value*.10})`;
-  paintFallbackWaves(grid);
+  paintFallbackWaves();
   ctx.restore();
  }
- // Targeting marks are part of the deformed material (shader or source mesh).
+ if(fallback&&grid)paintFallbackGuides();
+ // Targeting marks read the existing displacement with a separate, bounded gain.
  // This canvas retains only the existing orb; no rigid guide overlay remains.
  // The handle stays exactly at the parameter position; only the surrounding gel lags.
  const {x:ox,y:oy}=orbPoint();if(engineIsOn()){const glow=ctx.createRadialGradient(ox,oy,8,ox,oy,47);glow.addColorStop(0,'#f5a5ff77');glow.addColorStop(1,'#bf68ff00');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(ox,oy,47,0,Math.PI*2);ctx.fill();}
@@ -640,7 +662,7 @@ if(nativeBackend){
  nativeBackend.addEventListener('wubrotPlayhead',data=>updateRegionPosition(data.position));
  nativeBackend.addEventListener('wubrotAudio',data=>{if(!awaitingNativePower&&engineIsOn()&&!document.hidden&&motion&&liquid){audioVisual.receive(data.intensity,performance.now());schedule(false);}});
  nativeBackend.addEventListener('wubrotState',state=>{
-  applyingNative=true;
+  applyingNative=true;let acknowledgeVisual=false;
   try{
    const firstPower=awaitingNativePower&&Number.isFinite(state.enabled);
    if(!firstPower&&Number.isFinite(state.enabled))setEnginePower(state.enabled>=.5);
@@ -657,8 +679,9 @@ if(nativeBackend){
    $('filename').textContent=state.name?(state.analysisOnly?'DNA ENVELOPE (ANALYSIS): ':regionEditable?'WAV LOADER (EDITING): ':'WAV LOADER: ')+state.name:'WAV LOADER: DROP YOUR SAMPLE';
    if(Array.isArray(state.waveform)&&state.waveform.length===128){waveform=Float32Array.from(state.waveform);sampleLoaded=true;let roughness=0;for(let i=1;i<128;i++)roughness+=Math.abs(waveform[i]-waveform[i-1]);sharpness=Math.min(1,roughness/24);}else{waveform=null;sampleLoaded=false;sharpness=0;}
    drawWave();$('texture').textContent=(state.sampleRate/1000).toFixed(1)+' kHz / STEREO';window.wubrotPresetBrowser?.state(state.presets);
-   if(firstPower){membrane.x=px;membrane.y=py;membrane.vx=membrane.vy=0;awaitingNativePower=false;setEnginePower(state.enabled>=.5,true);void shell.offsetWidth;shell.classList.remove('awaiting-engine-state');}
+   if(firstPower){membrane.x=px;membrane.y=py;membrane.vx=membrane.vy=0;awaitingNativePower=false;setEnginePower(state.enabled>=.5,true);void shell.offsetWidth;shell.classList.remove('awaiting-engine-state');acknowledgeVisual=true;}
   }finally{applyingNative=false;}
+  if(acknowledgeVisual)nativeEvent('visualReady');
  });
  $('uiSize').onchange=()=>nativeEvent('uiSize',{index:$('uiSize').selectedIndex});
  // The preset module requests the initial state after all UI listeners exist.
