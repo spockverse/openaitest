@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "XYMapping.h"
 #include "PluginEditor.h"
 #include "EditorGeometry.h"
 #include <cmath>
@@ -52,7 +53,7 @@ static std::vector<float> render(WubrotProcessor& p, bool midi = false)
 }
 static void checkDnaRouting()
 {
-    WubrotProcessor p; p.setParameterValue("mutate",0);
+    WubrotProcessor p; p.setParameterValue("x",.6f);p.setParameterValue("y",-.35f);p.setParameterValue("mutate",0);
     p.loadSampleBytes(wav(false,.015f),"tonal-fixture.wav");waitForSample(p);
     juce::MemoryBlock stateA;p.getStateInformation(stateA);
     auto xmlA=juce::AudioProcessor::getXmlFromBinary(stateA.getData(),static_cast<int>(stateA.getSize()));
@@ -74,7 +75,7 @@ static void checkRegionEditor()
     for(int i=0;i<48000;++i){const float t=i/48000.0f;audio.setSample(0,i,i<24000?.4f*std::sin(1256.637f*t):(.4f*std::sin(10750.0f*t)+.25f*std::sin(18428.0f*t))*(i%6000<1500?1.0f:.1f));}
     juce::MemoryBlock bytes;juce::WavAudioFormat format;
     {std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(new juce::MemoryOutputStream(bytes,false),48000,1,16,{},0));require(writer&&writer->writeFromAudioSampleBuffer(audio,0,48000),"region fixture failed");}
-    WubrotProcessor p;p.loadSampleBytes(bytes,"two-regions.wav");waitForSample(p);p.setParameterValue("mutate",100);p.setParameterValue("drive",20);
+    WubrotProcessor p;p.setParameterValue("x",.5f);p.setParameterValue("y",-.4f);p.loadSampleBytes(bytes,"two-regions.wav");waitForSample(p);p.setParameterValue("mutate",100);p.setParameterValue("drive",20);
     auto select=[&](float start,float end){p.setParameterValue("regionStart",start);p.setParameterValue("regionEnd",end);p.serviceRegionEdit();waitForSample(p);};
     select(0,.45f);const auto first=render(p);juce::MemoryBlock firstState;p.getStateInformation(firstState);
     select(.55f,1);const auto second=render(p);require(first!=second,"selected WAV region did not affect audio");
@@ -128,7 +129,7 @@ static void checkVisualObserver()
         require(processor.setBusesLayout(layout),"Observer test layout failed");
         processor.setParameterValue("x",-.25f);processor.setParameterValue("y",.4f);processor.setParameterValue("drive",13);processor.setParameterValue("mutate",0);
         processor.prepareToPlay(rate,blockSize);CrushDSP reference;reference.prepare(rate);
-        CrushDSP::Parameters target;target.bits=16-(-.25f+1)*7;target.rate=static_cast<float>(500*std::pow(rate/500,(.4f+1)*.5));target.drive=13;target.mutate=0;target.mix=1;target.output=-6;target.protect=1;target.speed=1;target.mode=0;
+        CrushDSP::Parameters target;const auto mapped=XYMapping::map(-.25f,.4f,rate);target.bits=mapped.bits;target.rate=mapped.rate;target.activity=mapped.activity;target.centered=true;target.drive=13;target.mutate=0;target.mix=1;target.output=0;target.protect=1;target.speed=1;target.mode=0;
         float observedPeak=0;
         for(int block=0;block<32;++block)
         {
@@ -186,6 +187,7 @@ int main()
         }
         p.editorSize.store(1);
        #endif
+        p.setParameterValue("x",.6f);p.setParameterValue("y",-.35f);
         p.loadSampleBytes(wav(), "transient-pattern.wav"); waitForSample(p);
         require(p.uiState()["waveform"].size() == 128, "WAV analysis was not published");
         p.setParameterValue("mutate", 100); p.setParameterValue("protect", 0);
@@ -235,7 +237,8 @@ int main()
         axis.setParameterValue("y", -1); const auto top = render(axis);
         axis.setParameterValue("y", 1); const auto bottom = render(axis);
         auto steps = [](const std::vector<float>& audio) { int count = 0; for (std::size_t i = 1; i < audio.size(); ++i) if (std::abs(audio[i] - audio[i - 1]) > .01f) ++count; return count; };
-        require(steps(bottom) > steps(top) * 10, "XY up must reduce the sample rate, not increase it");
+        require(top==bottom,"New XY sample-rate reduction must be symmetric above and below centre");
+        axis.setParameterValue("y",0);const auto centre=render(axis);require(steps(centre)>steps(bottom),"Both vertical extremes must reduce sample rate from centre");
         p.setCurrentProgram(2); require(p.getCurrentProgram() == 2, "host preset selection must acknowledge immediately"); juce::Thread::sleep(75); juce::Timer::callPendingTimersSynchronously();
         require(p.getNumPrograms() == 3, "factory preset count");
         const auto folder = juce::File::createTempFile("-wubrot-content"); folder.deleteFile(); folder.createDirectory();

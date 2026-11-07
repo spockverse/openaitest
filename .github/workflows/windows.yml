@@ -73,7 +73,7 @@ jobs:
           New-Item -ItemType Directory -Force build/EditorScreenshots | Out-Null
           $env:WUBROT_SCREENSHOTS = Join-Path $PWD 'build/EditorScreenshots'
           $env:WUBROT_VISUAL_TRACE = Join-Path $PWD 'build/VisualTelemetry.json'
-          foreach ($task_test in @('PresetBrowser', 'PowerShutdown', 'AudioReactiveField', 'StationaryGrid', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
+          foreach ($task_test in @('FreshInstance', 'PresetBrowser', 'PowerShutdown', 'AudioReactiveField', 'StationaryGrid', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
             node "tests/$task_test.cjs" *> browser-test-output.log
             $task_browser_status = $LASTEXITCODE
             Get-Content browser-test-output.log

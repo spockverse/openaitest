@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "XYMapping.h"
 namespace
 {
 const char *soundIds[]{"x",      "y",       "mutate",  "drive",       "mode",      "mix",
@@ -13,6 +14,7 @@ juce::String signature(const juce::ValueTree &s, const juce::String &dna)
         text += ":" + juce::String(static_cast<juce::int64>(
                           std::llround((v - lows[i]) / (highs[i] - lows[i]) * 100000.)));
     }
+    if(static_cast<int>(s.getProperty("xyMapping",1))==2)text+=":xy2";
     return text;
 }
 } // namespace
@@ -30,6 +32,7 @@ juce::String WubrotProcessor::soundSignature()
             ":" +
             juce::String(static_cast<juce::int64>(std::llround(
                 (values[static_cast<std::size_t>(i)]->load() - lows[i]) / (highs[i] - lows[i]) * 100000.)));
+    if(xyMapping.load()==2)text+=":xy2";
     return text;
 }
 void WubrotProcessor::markPresetClean()
@@ -96,15 +99,10 @@ juce::Result WubrotProcessor::capturePortableState(juce::ValueTree &state, juce:
                                   "portable preset. Full region analysis is required.");
     float x = static_cast<float>(state.getChildWithProperty("id", "x")["value"]),
           y = static_cast<float>(state.getChildWithProperty("id", "y")["value"]);
-    const float length = std::hypot(x, y);
-    if (length > 1)
-    {
-        x /= length;
-        y /= length;
-    }
-    state.setProperty("crushBitDepth", 16 - (x + 1) * 7, nullptr);
+    const auto mapped=XYMapping::map(x,y,runningRate.load(),xyMapping.load());
+    state.setProperty("crushBitDepth", mapped.bits, nullptr);
     state.setProperty("referenceSampleRate", runningRate.load(), nullptr);
-    state.setProperty("crushSampleRate", 500 * std::pow(runningRate / 500, (y + 1) * .5), nullptr);
+    state.setProperty("crushSampleRate", mapped.rate, nullptr);
     if (!active.valid && !archive)
     {
         state.setProperty("analysisStart", state.getChildWithProperty("id", "regionStart")["value"], nullptr);

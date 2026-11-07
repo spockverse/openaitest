@@ -1,3 +1,15 @@
+# Centred XY audition (new mapping)
+
+Start with `xy-centre-dry-synthetic-stabs.wav`: this is the unchanged synthetic input.
+Compare `xy-horizontal-crunch-drive0.wav`, `xy-vertical-rate-drive0.wav` and
+`xy-combined-drive0.wav` on that same source. For a fair DRIVE comparison use
+`xy-combined-drive0-matched.wav` and `xy-combined-drive36-matched.wav`.
+The three `xy-dna-*-drive0-matched.wav` files use the identical bass and different
+synthetic analysis donors, all at MUTATE 100%, DRIVE 0, matched to 0.12 RMS.
+The donor recordings are not played or distributed. These tests measure changes;
+they do not establish subjective sound quality. Audition them in your normal setup.
+All files below without the `xy-` prefix exercise the retained legacy sound model.
+
 # WUBROT clean crusher and sample-region audition
 
 All files generated for distribution are synthetic. No user reference recordings

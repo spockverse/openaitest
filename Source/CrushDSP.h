@@ -13,7 +13,7 @@ public:
     struct Parameters
     {
         float drive=12,bits=8,rate=12000,mix=.65f,output=-6,protect=1;
-        float mutate=0,speed=1;bool enabled=true,patternEnabled=true,inputActive=true;int mode=0;
+        float mutate=0,speed=1,activity=1;bool centered=false;bool enabled=true,patternEnabled=true,inputActive=true;int mode=0;
     };
     void prepare(double sr)
     {
@@ -41,7 +41,10 @@ public:
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
         bypassWet+=std::clamp(goal-bypassWet,-step,step);
+        smooth(current.activity,std::clamp(target.activity,0.0f,1.0f));
+        if(target.centered&&target.activity<=0&&current.activity<1.0e-6f)current.activity=0;
         smooth(current.drive,std::clamp(target.drive,0.0f,36.0f));smooth(current.bits,std::clamp(target.bits,2.0f,16.0f));
+        if(target.centered&&target.drive<=0&&current.drive<1.0e-6f)current.drive=0;
         smooth(current.rate,std::clamp(target.rate,500.0f,static_cast<float>(sampleRate)));
         smooth(current.mix,std::clamp(target.mix,0.0f,1.0f));smooth(current.output,std::clamp(target.output,-24.0f,6.0f));
         smooth(current.protect,std::clamp(target.protect,0.0f,1.0f));smooth(current.mutate,std::clamp(target.mutate,0.0f,1.0f));smooth(current.speed,std::clamp(target.speed,.25f,4.0f));
@@ -84,7 +87,8 @@ public:
         const float harmonic=signature?signature->features[1]:.5f;
         const float even=signature?signature->features[2]:.5f;
         const float crest=signature?signature->features[3]:.3f;
-        const float drive=std::clamp(current.drive/24,0.0f,1.0f);
+        const float originalDrive=std::clamp(current.drive/24,0.0f,1.0f);
+        const float drive=target.centered?std::min(1.0f,originalDrive+.32f*current.activity):originalDrive;
         const float crush=(16-current.bits)/14;
         // Sample rhythm modulates coefficients only, in proportion to live articulation.
         const float articulation=std::clamp((fast-slow)/(slow+.03f),-1.0f,1.0f);
@@ -92,7 +96,8 @@ public:
         const float vowel=std::clamp(.2f+.4f*(fast/(fast+.1f))+.25f*articulation+.25f*brightness+.12f*crush+sampleMotion,0.0f,1.0f);
         const float bits=current.bits;
         const float rate=current.rate;
-        const float gain=1+current.drive*.16f*(1+influence*(.8f*harmonic+.5f*rough));
+        const float gain=1+current.drive*.16f*(1+influence*(.8f*harmonic+.5f*rough))
+                         +(target.centered?current.activity*(.6f+influence*(.8f*harmonic+.5f*rough)):0);
         const float asymmetry=influence*(2.8f*(even-.5f)+.5f*(crest-.3f)+.35f*(modulation-.5f));
         const float edge=drive*(.2f+.8f*crush+2.5f*influence*rough);
         const float output=std::pow(10.0f,current.output/20);
@@ -106,13 +111,20 @@ public:
             low[c]+=lowCoefficient*(dry[c]-low[c]);
             frame[ch]=dry[c]-current.protect*low[c];
         }
+        // Keep Sub removes much of a sine bass before quantisation. Calibrate
+        // that protected-band range so coarse bit settings still generate
+        // harmonics instead of rounding the whole signal to zero. Undo the
+        // calibration immediately; it must never act as an output gain boost.
+        const float quantizerRange=target.centered?1+3*current.activity:1;
+        for(int ch=0;ch<std::min(channels,2);++ch)frame[ch]*=quantizerRange;
         crusher.process(frame,channels,bits,rate);
+        for(int ch=0;ch<std::min(channels,2);++ch)frame[ch]/=quantizerRange;
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
             const auto c=static_cast<std::size_t>(ch);
             const float source=frame[ch];
             const float shaped=nonlinear.tick(source,ch,gain,asymmetry,edge);
-            const float blend=std::min(1.0f,current.drive/6);
+            const float blend=std::min(1.0f,current.drive/6+(target.centered?.55f*current.activity:0));
             const float driven=source+blend*(shaped-source);
             const float dc=driven-dcInput[c]+dcCoefficient*dcOutput[c];dcInput[c]=driven;dcOutput[c]=dc;
             frame[ch]=dc;
@@ -126,8 +138,13 @@ public:
             const float coloured=frame[ch];
             const float release=std::clamp(static_cast<float>(tail-silentFrames)/static_cast<float>(sampleRate*.02),0.0f,1.0f);
             const float tailGain=release*release*(3-2*release);
-            const float wet=(coloured+current.protect*low[c])*tailGain;
-            const float processed=(dry[c]+current.mix*(wet-dry[c]))*output;
+            const float headroom=target.centered?1/(1+1.8f*drive+.25f*current.activity):1;
+            const float wet=(coloured+current.protect*low[c])*tailGain*headroom;
+            // A short continuous centre transition removes quantizer/DC/filter residuals
+            // at exactly neutral, without a dry dead zone. Axis mapping still
+            // determines the sound throughout the field; DRIVE adds intensity away from neutral.
+            const float fieldBlend=target.centered?std::min(1.0f,current.activity*8):1;
+            const float processed=(dry[c]+current.mix*fieldBlend*(wet-dry[c]))*output;
             frame[ch]=bypassWet<=0?original[c]:bypassWet>=1?processed:original[c]+bypassWet*(processed-original[c]);
         }
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}

@@ -68,7 +68,7 @@ private:
     PresetLibrary presetLibrary;
     juce::ThreadPool presetJobs {1};
     std::atomic<bool> presetBusy {false}, stopping {false}, resetProfileClock {false};
-    juce::String activePresetName {"RIDDIM MONSTER"}, activeUserFile, presetBaseline, dnaKey, dnaOriginKey;
+    juce::String activePresetName {"INIT"}, activeUserFile, presetBaseline, dnaKey, dnaOriginKey;
     juce::String libraryError;
     juce::Array<juce::var> userPresetEntries;
     juce::var presetResult;
@@ -90,6 +90,7 @@ private:
     std::array<float,DnaProfile::bins> fullEnvelope {};
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
+    std::atomic<int> xyMapping {2};
     CrushDSP dsp;
     AudioReactivity visualAnalyser;
     AudioReactivityMailbox visualReadout;
@@ -101,7 +102,7 @@ private:
     juce::ThreadPool sampleJobs { 1 };
     std::atomic<bool> loading { false }, regionJob { false };
     std::atomic<std::uint64_t> generation { 0 };
-    std::atomic<int> presetRequest { 0 }, currentPreset { 0 };
+    std::atomic<int> presetRequest { -1 }, currentPreset { 0 };
     std::atomic<double> runningRate { 44100 };
     bool lastTransportPlaying=false;
     juce::int64 lastReportedSample=-1, expectedSample = -1;

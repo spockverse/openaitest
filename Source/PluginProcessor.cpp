@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "XYMapping.h"
 
 namespace {
 const char* presetFolders[] { "01 Riddim Monster", "02 Liquid Glass", "03 Metal Teeth" };
@@ -26,9 +27,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
             juce::NormalisableRange<float>(lo, hi), initial, juce::AudioParameterFloatAttributes().withLabel(unit)));
     };
     add("x", "Crush Field X", -1, 1, 0, ""); add("y", "Crush Field Y", -1, 1, 0, "");
-    add("mutate", "Mutate", 0, 100, 67, "%"); add("drive", "Drive", 0, 36, 8.5f, "dB");
+    add("mutate", "Mutate", 0, 100, 100, "%"); add("drive", "Drive", 0, 36, 0, "dB");
     p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { "mode", 1 }, "DNA Mode", juce::StringArray { "LOOP", "RETRIGGER" }, 0));
-    add("mix", "Mix", 0, 100, 100, "%"); add("output", "Output", -24, 6, -6, "dB");
+    add("mix", "Mix", 0, 100, 100, "%"); add("output", "Output", -24, 6, 0, "dB");
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "protect", 1 }, "Keep Sub", true));
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "enabled", 1 }, "Engine On", true));
     add("regionStart","DNA Start",0,1,0,"");add("regionEnd","DNA End",0,1,1,"");
@@ -52,10 +53,10 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     lastVisualBlockMs=visualNow;lastVisualBlockDurationMs=buffer.getNumSamples()*1000.0/runningRate.load();
     if(resetProfileClock.exchange(false))dsp.resetModulation();
     float x = values[0]->load(), y = values[1]->load();
-    const float length = std::hypot(x, y); if (length > 1) { x /= length; y /= length; }
     CrushDSP::Parameters p;
-    p.bits = 16 - (x + 1) * 7;
-    p.rate = static_cast<float>(500 * std::pow(runningRate / 500, (y + 1) * .5));
+    const auto mappingVersion=xyMapping.load();
+    const auto mapped=XYMapping::map(x,y,runningRate.load(),mappingVersion);
+    p.bits=mapped.bits;p.rate=mapped.rate;p.activity=mapped.activity;p.centered=mappingVersion==2;
     p.mutate = values[2]->load() * .01f; p.drive = values[3]->load(); p.mode = static_cast<int>(values[4]->load());
     p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load(); p.enabled = values[8]->load() >= .5f;
     constexpr float speeds[]{.25f,.5f,1,2,4};p.speed=speeds[juce::jlimit(0,4,static_cast<int>(values[11]->load()))];
@@ -215,9 +216,14 @@ bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
     const auto data = manifest["parameters"];
     for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed" })
     {
-        const float fallback=juce::String(id)=="enabled"||juce::String(id)=="regionEnd"?1.f:juce::String(id)=="dnaSpeed"?2.f:parameters.getParameter(id)->convertFrom0to1(parameters.getParameter(id)->getDefaultValue());
+        float fallback=parameters.getParameter(id)->convertFrom0to1(parameters.getParameter(id)->getDefaultValue());
+        const juce::String parameterId(id);
+        if(parameterId=="mutate")fallback=67;
+        else if(parameterId=="drive")fallback=8.5f;
+        else if(parameterId=="output")fallback=-6;
         parameterGesture(id,true);setParameterValue(id,data.hasProperty(id)?static_cast<float>(data[id]):fallback);parameterGesture(id,false);
     }
+    xyMapping.store(1); // Factory sounds retain their original mapping.
     currentPreset.store(index);
     {const juce::ScopedLock lock(metadataLock);activePresetName=presetNames[index];activeUserFile.clear();}
     const auto relative = manifest["sample"].toString();
@@ -239,6 +245,9 @@ juce::var WubrotProcessor::uiState()
         object->setProperty(id, parameters.getRawParameterValue(id)->load());
     object->setProperty("name", sampleName); object->setProperty("status", status);
     object->setProperty("loading", loading.load()&&!regionJob.load()); object->setProperty("preset", currentPreset.load());
+    object->setProperty("xyMapping",xyMapping.load());
+    const auto mapping=XYMapping::map(values[0]->load(),values[1]->load(),runningRate.load(),xyMapping.load());
+    object->setProperty("crushBitDepth",mapping.bits);object->setProperty("crushSampleRate",mapping.rate);
     object->setProperty("sampleRate", runningRate.load()); object->setProperty("editorSize", editorSize.load());
     auto p = profiles.read(); juce::Array<juce::var> wave;
     if (const auto* profile = p.get(); profile && (profile->valid||source||analysisArchive||storedWav.getSize()>0))
@@ -252,7 +261,7 @@ juce::var WubrotProcessor::uiState()
 juce::ValueTree WubrotProcessor::captureState(bool includeSourceAudio)
 {
     const juce::ScopedLock lock(metadataLock);
-    auto state = parameters.copyState(); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.removeProperty("dnaSpectrum", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
+    auto state = parameters.copyState(); state.setProperty("xyMapping",xyMapping.load(),nullptr); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.removeProperty("dnaSpectrum", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
     state.setProperty("analysisStart",analysedStart,nullptr);state.setProperty("analysisEnd",analysedEnd,nullptr);
     state.setProperty("sampleName", sampleName, nullptr); state.setProperty("preset", currentPreset.load(), nullptr);
     state.removeProperty("sourceWav",nullptr);state.removeProperty("fullEnvelope",nullptr);
@@ -291,6 +300,8 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
+    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2")
+    {setStatus("Unsupported XY mapping version. This project needs a newer WUBROT build.");return;}
     if (!state.getChildWithProperty("id", "enabled").isValid())
     {
         juce::ValueTree on("PARAM"); on.setProperty("id", "enabled", nullptr); on.setProperty("value", 1.0f, nullptr);
@@ -345,6 +356,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto full=juce::JSON::parse(state["fullEnvelope"].toString());
     if(auto* array=full.getArray();array&&array->size()==static_cast<int>(DnaProfile::bins))for(std::size_t i=0;i<DnaProfile::bins;++i){const float v=static_cast<float>((*array)[static_cast<int>(i)]);fullEnvelope[i]=std::isfinite(v)?juce::jlimit(0.0f,1.0f,v):0;}
     storedWav.fromBase64Encoding(state["sourceWav"].toString());if(storedWav.getSize()>maxSampleBytes)storedWav.reset();
+    xyMapping.store(static_cast<int>(state.getProperty("xyMapping",1))==2?2:1);
     parameters.replaceState(state); profiles.publish(profile);
     presetBaseline=state.getProperty("presetBaseline",soundSignature()).toString();
     analysedStart=static_cast<float>(state.getProperty("analysisStart",values[9]->load()));analysedEnd=static_cast<float>(state.getProperty("analysisEnd",values[10]->load()));

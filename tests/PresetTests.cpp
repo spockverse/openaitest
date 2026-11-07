@@ -93,6 +93,7 @@ int main()
                     "modified factory cannot save as user preset");
         }
         WubrotProcessor p(docs);
+        p.setParameterValue("x",.5f);p.setParameterValue("y",-.4f);
         p.loadSampleBytes(fixture(), "synthetic-regions.wav");
         wait(p);
         p.setParameterValue("mutate", 100);
@@ -178,7 +179,7 @@ int main()
         const auto before = render(p);
         require(p.importPreset(corrupt, "Bad", false).failed(), "malformed preset accepted");
         require(render(p) == before, "rejected import modified audio");
-        auto version = text.replace("formatVersion=\"1\"", "formatVersion=\"999\"");
+        auto version = text.replace("formatVersion=\"2\"", "formatVersion=\"999\"");
         corrupt.replaceWithText(version);
         require(PresetLibrary::read(corrupt, state, name).failed(), "future version accepted");
         require(PresetLibrary::read(file, state, name).wasOk(), "valid file not readable");

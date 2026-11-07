@@ -10,19 +10,27 @@ The existing Crush Field movement also responds gently to low-end attacks in WUB
 
 The thin targeting circles and crosshairs form a fixed, centered overlay. They never follow the orb or deform with the jelly, including during audio-reactive pulses. Audio intensifies only existing ripple displacement, with a separate six-pixel limit; it does not amplify the orb's bulk tension/stretch. The XY handle remains at its exact parameter position.
 
+## Fresh instances and centred XY
+
+New instances open as **INIT**: MUTATE 100%, DRIVE 0 dB, no DNA, XY exactly centred, and Output 0 dB. No factory sample or last-used sound is loaded automatically. At centre the new mapping passes the input unchanged (unless you explicitly change Output). DRIVE and DNA add intensity away from centre, not an independent sound at neutral.
+
+Either horizontal direction progressively reduces bit depth; either vertical direction progressively reduces sample rate. Distance curves are continuous with no dry dead zone. The existing protected-sub quantizer range is calibrated so coarse bits still excite sine basses, and existing input-derived shaping/formants remain useful at DRIVE 0. A short centre blend, parameter smoothing and conservative wet gain compensation control transitions and peaks without a limiter or extra audio layer.
+
+**Existing projects, factory presets and old user presets retain their original XY mapping and sound.** New projects/presets save `xyMapping=2`; missing mapping metadata means the original mapping. To audition the centred behavior after upgrading, insert a genuinely fresh instance rather than reopening an old saved sound. Parameter IDs, ranges, automation, VST3 identity, region/speed/mode and source-independent DNA recall stay intact.
+
 ## Controls
 
-- **Crush Field X:** move right for fewer bits (16 down to 2).
-- **Crush Field Y:** move up for more sample-rate reduction (the current host sample rate down to 500 Hz). The circular boundary limits the reachable X/Y combinations.
+- **Crush Field X:** move left or right from centre for fewer bits (16 down to 2). Legacy sounds retain the original left-to-right mapping.
+- **Crush Field Y:** move up or down from centre for more sample-rate reduction (the current host sample rate down to 500 Hz). Legacy sounds retain the original bottom-to-top mapping. The circular boundary limits the reachable X/Y combinations.
 - **ROT DNA:** drop or browse for WAV/MP3 audio, up to 20 MB. The first 30 seconds are analysed for temporal, spectral and harmonic characteristics. The analysis shapes incoming audio; the source is not played as a layer.
 - **MUTATE:** blends the loaded DNA's temporal and harmonic characteristics into input-dependent processing. At 0%, the loaded DNA has no influence.
-- **DRIVE:** adds nonlinear distortion before quantisation. Its antiderivative antialiasing reduces unwanted drive-stage aliasing; the sample-rate crusher's aliasing is intentional. At zero, the drive stage blends out.
+- **DRIVE:** adds nonlinear distortion before quantisation. Its antiderivative antialiasing reduces unwanted drive-stage aliasing; the sample-rate crusher's aliasing is intentional. At zero, additional DRIVE gain is removed; the centred XY mapping and DNA coloration remain active away from neutral.
 - **LOOP / RETRIGGER:** LOOP repeats the selected analysis region while the DAW plays and input is active; RETRIGGER restarts it on bass attacks or MIDI note-on. START/END select the region and SPEED changes the modulation rate. The playhead follows the actual DSP profile position and freezes when stopped or silent. With no host transport information, active live input can drive the profile. No source audio is played.
 - **SPEED:** drag the small rotary knob up/down, use its mouse wheel or arrow keys, or choose from the custom selector. The five supported values are 0.25×, 0.5×, 1×, 2× and 4×. Shift-drag gives finer stepping; double-click resets to 1×. Both controls follow the existing automation parameter. The single cyan mode switch selects LOOP on the left and RETRIGGER on the right; both labels use the same cyan lighting. Controls remain adjustable, with grey lighting, while the engine is OFF.
 
 Bass transient detection uses a fixed threshold and 50 ms guard time; very quiet or continuously sustained sounds may not retrigger as expected. MIDI offers explicit timing when the DAW routes notes to an audio effect. MIDI routing differs between hosts; incoming notes are not passed through the effect.
 
-Mix (default 100%), Output (default −6 dB), and Keep Sub are available as host automation parameters without adding more panels to the interface. Keep Sub preserves a gently filtered band around 120 Hz. Output is not a limiter; watch your mixer levels.
+Mix (default 100%), Output (fresh-instance default 0 dB), and Keep Sub are available as host automation parameters without adding more panels to the interface. Keep Sub preserves a gently filtered band around 120 Hz. Output is not a limiter; watch your mixer levels.
 
 The approved black/purple interface, solar orb and deforming membrane are embedded in the Windows plugin. Native audio runs separately from the web renderer. Closing the editor does not stop processing. The cloud development build uses a native fallback editor for automated testing. Windows is the only current release target.
 
@@ -116,7 +124,7 @@ Close FL Studio before updating. Extract the ZIP and replace the entire existing
 
 The plugin bundle contains the embedded UI, jelly texture and native bridge. Factory manifests and any supplied sample content are copied into Contents/Resources/WubrotContent inside the bundle, which is checked before the legacy ProgramData location. No separate UI folder or installer is needed. Microsoft WebView2 Runtime is still a platform prerequisite for the editor. Factory WAVs are not supplied yet; load your own WAV. The filename, bundle ID, manufacturer code, plugin code, parameter IDs and state format remain stable across development builds.
 
-UI sizes are Small 600×500, Medium 804×670 (default), and Large 996×830 logical pixels. The size selector requests the corresponding native editor size; arbitrary resizing is disabled. The selection persists when reopening the editor and is stored with project state. Windows/FL Studio DPI settings can affect physical pixel dimensions. FL Studio-specific visual validation still requires testing on your machine.
+UI sizes are Small 600×520, Medium 804×697 (default), and Large 996×864 logical pixels. The size selector requests the corresponding native editor size; arbitrary resizing is disabled. The selection persists when reopening the editor and is stored with project state. Windows/FL Studio DPI settings can affect physical pixel dimensions. FL Studio-specific visual validation still requires testing on your machine.
 
 ## Preset library
 
