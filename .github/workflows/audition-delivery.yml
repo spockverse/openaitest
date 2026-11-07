@@ -1,0 +1,28 @@
+name: WUBROT Listening Review Download
+on:
+  push:
+    branches: [audition-review]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render synthetic auditions only (no plugin build)
+        run: |
+          g++ -O3 -std=c++17 -ISource -Itests audition-review/Prototype.cpp -o "$RUNNER_TEMP/wubrot-audition"
+          "$RUNNER_TEMP/wubrot-audition" audition-review/wavs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WUBROT-listening-review
+          path: |
+            audition-review/wavs/
+            audition-review/README.md
+            audition-review/audition-metrics.json
+            audition-review/reference-observations.json
+            audition-review/aligned-reference-analysis.json
+          retention-days: 90
+          if-no-files-found: error
