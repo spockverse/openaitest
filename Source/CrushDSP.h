@@ -44,6 +44,7 @@ public:
         const bool impact=target.processingVersion>=4;
         const bool sine=target.processingVersion>=5;
         const bool controlFix=target.processingVersion>=7;
+        const bool digitalRouting=target.processingVersion>=8;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -53,7 +54,7 @@ public:
         if(target.centered&&target.activity<=0&&current.activity<1.0e-6f)current.activity=0;
         smooth(current.drive,std::clamp(target.drive,0.0f,36.0f));smooth(current.bits,std::clamp(target.bits,2.0f,16.0f));
         if(target.centered&&target.drive<=0&&current.drive<1.0e-6f)current.drive=0;
-        smooth(current.rate,std::clamp(target.rate,500.0f,static_cast<float>(sampleRate)));
+        smooth(current.rate,std::clamp(target.rate,digitalRouting?32.0f:500.0f,static_cast<float>(sampleRate)));
         if(modern){const float m=std::clamp(target.mix,0.f,1.f),stepMix=1/float(sampleRate*.02);current.mix+=std::clamp(m-current.mix,-stepMix,stepMix);}else smooth(current.mix,std::clamp(target.mix,0.0f,1.0f));smooth(current.output,std::clamp(target.output,-24.0f,6.0f));
         smooth(current.protect,std::clamp(target.protect,0.0f,1.0f));if(modern){const float m=std::clamp(target.mutate,0.f,1.f),stepM=1/float(sampleRate*.02);current.mutate+=std::clamp(m-current.mutate,-stepM,stepM);}else smooth(current.mutate,std::clamp(target.mutate,0.0f,1.0f));smooth(current.speed,std::clamp(target.speed,.25f,4.0f));
         if(current.mode!=target.mode){current.mode=target.mode;resetModulation();}
@@ -129,7 +130,7 @@ public:
                 const bool advanced=target.processingVersion>=6;
                 const float dnaShift=advanced?influence*(std::clamp(modernShape.logPeaks[0]-6.5510803f,-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix?0:dnaShift,controlFix?0:dnaMotion);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix?0:dnaShift,controlFix?0:dnaMotion,digitalRouting);
                 // Keep optional DNA coloration; no generic moving resonators in the core.
                 tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0);
                 if(controlFix){
@@ -149,7 +150,7 @@ public:
         const std::array<float,2> dry {frame[0],channels==2?frame[1]:0};
         if(sine)
         {
-            sineCrush.process(frame,channels);
+            if(!digitalRouting)sineCrush.process(frame,channels);
             if(controlFix){
                 for(std::size_t i=0;i<excitationControl.size();++i)excitationControl[i]+=excitationStep[i];
                 if(excitationControl[3]>0){excitationActive=true;
@@ -160,15 +161,16 @@ public:
                     frame[ch]+=excitationControl[3]*(high-dcOutput[c]);
                 }}else if(excitationActive){nonlinear.reset();dcInput={};dcOutput={};excitationActive=false;}
             }
+            if(digitalRouting)sineCrush.process(frame,channels,dry.data());
             tonal.processModern(frame,channels,controlFix&&(influence>0||tonal.transformationActive())?sineCrush.foundation():nullptr);
             for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
-                if(controlFix&&(driveUnit>0||influence>0)){
+                if(controlFix&&(digitalRouting||driveUnit>0||influence>0)){
                     // Bound the transformed body, preserving the complementary
                     // bass foundation. Inactive controls leave XY sample-exact.
                     const float foundation=sineCrush.foundation()[c],body=frame[ch]-foundation;
                     const float room=std::max(.08f,1.f-std::abs(foundation)),ratio=body/room;
                     const float conditioned=foundation+body/std::sqrt(1+ratio*ratio);
-                    frame[ch]+=std::max(driveUnit,influence)*(conditioned-frame[ch]);
+                    frame[ch]+=(digitalRouting?current.activity:std::max(driveUnit,influence))*(conditioned-frame[ch]);
                 }
                 const float blend=std::min(1.f,current.activity*8)*current.mix;
                 const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;
@@ -229,6 +231,7 @@ public:
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
     }
 private:
+    friend struct DigitalRoutingProbe;
     void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;excitationPrimed=false;excitationActive=false;excitationControl={};excitationStep={};low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();sineCrush.reset();}
     float coefficient(float seconds)const noexcept{return 1-std::exp(-1/static_cast<float>(sampleRate*seconds));}
     void smooth(float& v,float target)const noexcept{v+=smoothCoefficient*(target-v);}

@@ -46,10 +46,11 @@ public:
         phase+=increment;primed=true;
     }
     // All expensive transforms run only at the bounded engine control rate.
-    void setModern(float bits, float rate, float antiAlias, float rebuild, int frames) noexcept
+    void setModern(float bits, float rate, float antiAlias, float rebuild, int frames, float minimumRate=500.f) noexcept
     {
-        rate = std::clamp(rate, 500.f, float(sampleRate));
-        const std::array<float, 4> key{bits, rate, antiAlias, rebuild};
+        modernMinimum=std::clamp(minimumRate,1.f,float(sampleRate));
+        rate = std::clamp(rate, modernMinimum, float(sampleRate));
+        const std::array<float, 5> key{bits, rate, antiAlias, rebuild,modernMinimum};
         if (modernPrimed && key == modernKey)
         {
             modern = modernGoal;
@@ -74,8 +75,8 @@ public:
         for (std::size_t i = 0; i < 5; ++i)
             modern[i] += modernStep[i];
         const float steps = std::max(2.f, modern[0]),
-                    increment = std::clamp(modern[1], float(500 / sampleRate), 1.f),
-                    g = std::max(.001f, modern[2]);
+                    increment = std::clamp(modern[1], float(modernMinimum / sampleRate), 1.f),
+                    g = std::max(modernMinimum<500?1.e-7f:.001f, modern[2]);
         const bool capture = phase >= 1;
         const float fraction = primed ? std::clamp(float(1 - (phase - 1) / increment), 0.f, 1.f) : 1.f;
         if (capture)
@@ -96,7 +97,8 @@ public:
         primed = true;
     }
 private:
-    std::array<float,5> modern{},modernStep{},modernGoal{};std::array<float,4> modernKey{};bool modernPrimed=false;
+    friend struct DigitalRoutingProbe;
+    std::array<float,5> modern{},modernStep{},modernGoal{};std::array<float,5> modernKey{};float modernMinimum=500;bool modernPrimed=false;
     double sampleRate=48000,phase=1;bool primed=false;
     std::array<float,2> previous{},held{};
     std::array<std::array<Lowpass,4>,2> filters{};

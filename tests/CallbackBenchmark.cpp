@@ -105,8 +105,8 @@ int main(int argc, char **argv)
         std::filesystem::create_directories(dir);
         const juce::String label = argc > 2 ? argv[2] : "current";
         const bool ui = argc > 3 && std::string(argv[3]) == "ui";
-        const int model=argc>4?std::stoi(argv[4]):7;
-        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6 or 7");
+        const int model=argc>4?std::stoi(argv[4]):8;
+        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7&&model!=8)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6, 7 or 8");
         std::ofstream report(dir / (label.toStdString() + "-callback.json"));
         report << "{\"label\":\"" << label << "\",\"cpu\":\"" << juce::SystemStats::getCpuVendor() << " "
                << juce::SystemStats::getCpuModel() << "\",\"logicalCpus\":" << juce::SystemStats::getNumCpus()

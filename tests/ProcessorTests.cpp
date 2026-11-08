@@ -130,7 +130,7 @@ static void checkVisualObserver()
         require(processor.setBusesLayout(layout),"Observer test layout failed");
         processor.setParameterValue("x",-.25f);processor.setParameterValue("y",.4f);processor.setParameterValue("drive",13);processor.setParameterValue("mutate",0);
         processor.prepareToPlay(rate,blockSize);CrushDSP reference;reference.prepare(rate);
-        CrushDSP::Parameters target;const float rx=processor.parameters.getRawParameterValue("x")->load(),ry=processor.parameters.getRawParameterValue("y")->load();const auto mapped=XYMapping::map(rx,ry,rate);target.processingVersion=int(processor.uiState()["xyMapping"]);target.signedX=rx;target.signedY=ry;target.bits=mapped.bits;target.rate=mapped.rate;target.activity=mapped.activity;target.centered=true;target.drive=13;target.mutate=0;target.mix=1;target.output=0;target.protect=1;target.speed=1;target.mode=0;
+        CrushDSP::Parameters target;const float rx=processor.parameters.getRawParameterValue("x")->load(),ry=processor.parameters.getRawParameterValue("y")->load();target.processingVersion=int(processor.uiState()["xyMapping"]);const auto mapped=XYMapping::map(rx,ry,rate,target.processingVersion);target.signedX=rx;target.signedY=ry;target.bits=mapped.bits;target.rate=mapped.rate;target.activity=mapped.activity;target.centered=true;target.drive=13;target.mutate=0;target.mix=1;target.output=0;target.protect=1;target.speed=1;target.mode=0;
         float observedPeak=0;
         for(int block=0;block<32;++block)
         {
