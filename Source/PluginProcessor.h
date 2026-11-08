@@ -83,14 +83,14 @@ private:
     void setSampleStatus(std::uint64_t,const juce::String&);
     void finishSampleJob(std::uint64_t,bool factoryPreset=false);
     juce::File factoryRoot() const;
-    struct SampleSource { juce::AudioBuffer<float> audio; juce::MemoryBlock wav; double rate=48000; DnaProfile full; };
+    struct SampleSource { juce::AudioBuffer<float> audio; juce::MemoryBlock wav; double rate=48000; DnaProfile full;bool includeLow=false; };
     static DnaProfile analyseRegion(const SampleSource&, float, float);
     std::shared_ptr<const SampleSource> source;
     juce::MemoryBlock storedWav;
     std::array<float,DnaProfile::bins> fullEnvelope {};
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
-    std::atomic<int> xyMapping {8};
+    std::atomic<int> xyMapping {9};
     CrushDSP dsp;
     AudioReactivity visualAnalyser;
     AudioReactivityMailbox visualReadout;

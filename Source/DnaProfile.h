@@ -39,7 +39,7 @@ struct DnaProfile
         const float fraction = static_cast<float>(position - std::floor(position));
         return values[i] + fraction * (values[(i + 1) % bins] - values[i]);
     }
-    void analyseTemporal(const float *const *channels, int channelCount, std::size_t frames, double sampleRate)
+    void analyseTemporal(const float *const *channels, int channelCount, std::size_t frames, double sampleRate,bool includeLow=false)
     {
         auto &p = *this;
 
@@ -54,7 +54,7 @@ struct DnaProfile
             for (int ch = 0; ch < channelCount; ++ch)
                 region[std::size_t(ch)] = channels[ch] + std::min(first, frames - 1);
             const auto shape = DnaSpectrum::analyse(region.data(), channelCount,
-                                                    std::min(frames - first, last - first), sampleRate);
+                                                    std::min(frames - first, last - first), sampleRate,includeLow);
             p.spectralFrames[f] = DnaTemporalFrame::from(shape.valid ? shape : p.spectrum);
         }
         // Confidence of a resonance recurring across the reference, not its loudness.
@@ -72,7 +72,7 @@ struct DnaProfile
                 f.persistence[b] = matching / float(spectralCapacity);
             }
     }
-    static DnaProfile analyse(const float* const* channels, int channelCount, std::size_t frames, double sampleRate,bool temporal=false)
+    static DnaProfile analyse(const float* const* channels, int channelCount, std::size_t frames, double sampleRate,bool temporal=false,bool includeLow=false)
     {
         DnaProfile p;
         if (sampleRate < 8000 || sampleRate > 384000 || channelCount < 1 || channelCount > 8 || frames == 0) return p;
@@ -109,8 +109,8 @@ struct DnaProfile
         }
         if (maximum < 1.0e-7f) return p;
         for (auto& v : p.envelope) v /= maximum;
-        p.spectrum = DnaSpectrum::analyse(channels, channelCount, frames, sampleRate);
-        if(temporal)p.analyseTemporal(channels,channelCount,frames,sampleRate);
+        p.spectrum = DnaSpectrum::analyse(channels, channelCount, frames, sampleRate,includeLow);
+        if(temporal)p.analyseTemporal(channels,channelCount,frames,sampleRate,includeLow);
         p.valid = true; return p;
     }
 };

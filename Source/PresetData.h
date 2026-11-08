@@ -53,7 +53,7 @@ inline bool readSpectrum(const juce::var &v, DnaSpectrum &s)
         return juce::var(b);
     };
     if (!numbers(sub(1, 13), s.bands.data(), 12, 0, 1) || !numbers(sub(13, 18), s.features.data(), 5, 0, 1) ||
-        !numbers(sub(18, 21), s.peaks.data(), 3, 100, 10000))
+        !numbers(sub(18, 21), s.peaks.data(), 3, 30, 10000))
         return false;
     s.valid = static_cast<bool>((*a)[0]);
     s.prepareDerived();
@@ -113,7 +113,7 @@ inline bool readTemporal(const juce::var &v, DnaProfile &p)
             f.logPeaks[j] = values[17 + j];
             f.resonance[j] = values[20 + j];
             f.persistence[j] = values[23 + j];
-            if (f.logPeaks[j] < 4.60517f || f.logPeaks[j] > 9.210341f || f.resonance[j] < 1.5f ||
+            if (f.logPeaks[j] < 3.401197f || f.logPeaks[j] > 9.210341f || f.resonance[j] < 1.5f ||
                 f.resonance[j] > 6 || f.persistence[j] > 1)
                 return false;
         }

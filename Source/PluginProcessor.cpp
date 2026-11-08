@@ -153,7 +153,8 @@ void WubrotProcessor::decodeSample(std::unique_ptr<juce::InputStream> stream, co
     const int frames = static_cast<int>(std::min(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 30)));
     juce::AudioBuffer<float> audio(static_cast<int>(reader->numChannels), frames);
     if (!reader->read(audio.getArrayOfWritePointers(), audio.getNumChannels(), 0, frames)) { setSampleStatus(token,"Audio decoding/read failed. Previous DNA is unchanged."); return; }
-    const auto profile = DnaProfile::analyse(audio.getArrayOfReadPointers(), audio.getNumChannels(), static_cast<std::size_t>(frames), reader->sampleRate,xyMapping.load()>=3);
+    prepared->includeLow=xyMapping.load()>=9;
+    const auto profile = DnaProfile::analyse(audio.getArrayOfReadPointers(), audio.getNumChannels(), static_cast<std::size_t>(frames), reader->sampleRate,xyMapping.load()>=3,prepared->includeLow);
     if (!profile.valid) { setSampleStatus(token,"This WAV is silent. Previous DNA is unchanged."); return; }
     prepared->audio=std::move(audio);prepared->rate=reader->sampleRate;prepared->full=profile;
     const float start=values[9]->load(),end=values[10]->load();
@@ -173,7 +174,7 @@ DnaProfile WubrotProcessor::analyseRegion(const SampleSource& s,float start,floa
     const int last=juce::jlimit(first+1,s.audio.getNumSamples(),static_cast<int>(hi*s.audio.getNumSamples()));
     std::array<const float*,8> channels{};for(int ch=0;ch<s.audio.getNumChannels();++ch)channels[static_cast<std::size_t>(ch)]=s.audio.getReadPointer(ch)+first;
     if(first==0&&last==s.audio.getNumSamples())return s.full;
-    return DnaProfile::analyse(channels.data(),s.audio.getNumChannels(),static_cast<std::size_t>(last-first),s.rate,s.full.spectralCount>0);
+    return DnaProfile::analyse(channels.data(),s.audio.getNumChannels(),static_cast<std::size_t>(last-first),s.rate,s.full.spectralCount>0,s.includeLow);
 }
 void WubrotProcessor::serviceRegionEdit()
 {
@@ -308,7 +309,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
-    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8")
+    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8"&&state["xyMapping"].toString()!="9")
     {setStatus("Unsupported XY mapping version. This project needs a newer WUBROT build.");return;}
     if (!state.getChildWithProperty("id", "enabled").isValid())
     {
@@ -344,7 +345,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
         for(int i=0;i<20;++i)
         {
             const float v=static_cast<float>((*array)[i]);
-            if(!std::isfinite(v)||v<0||v>(i<17?1.0f:10000.0f)||(i>=17&&v<100)){valid=false;break;}
+            if(!std::isfinite(v)||v<0||v>(i<17?1.0f:10000.0f)||(i>=17&&v<30)){valid=false;break;}
             if(i<12)profile.spectrum.bands[static_cast<std::size_t>(i)]=v;
             else if(i<17)profile.spectrum.features[static_cast<std::size_t>(i-12)]=v;
             else profile.spectrum.peaks[static_cast<std::size_t>(i-17)]=v;
@@ -366,7 +367,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto full=juce::JSON::parse(state["fullEnvelope"].toString());
     if(auto* array=full.getArray();array&&array->size()==static_cast<int>(DnaProfile::bins))for(std::size_t i=0;i<DnaProfile::bins;++i){const float v=static_cast<float>((*array)[static_cast<int>(i)]);fullEnvelope[i]=std::isfinite(v)?juce::jlimit(0.0f,1.0f,v):0;}
     storedWav.fromBase64Encoding(state["sourceWav"].toString());if(storedWav.getSize()>maxSampleBytes)storedWav.reset();
-    xyMapping.store(juce::jlimit(1,8,static_cast<int>(state.getProperty("xyMapping",1))));
+    xyMapping.store(juce::jlimit(1,9,static_cast<int>(state.getProperty("xyMapping",1))));
     parameters.replaceState(state); profiles.publish(profile);
     presetBaseline=state.getProperty("presetBaseline",soundSignature()).toString();
     analysedStart=static_cast<float>(state.getProperty("analysisStart",values[9]->load()));analysedEnd=static_cast<float>(state.getProperty("analysisEnd",values[10]->load()));

@@ -16,7 +16,7 @@ struct DnaTemporalFrame
         f.features = s.features;
         for (std::size_t i = 0; i < 3; ++i)
         {
-            f.logPeaks[i] = std::log(std::clamp(s.peaks[i], 100.f, 10000.f));
+            f.logPeaks[i] = std::log(std::clamp(s.peaks[i], 30.f, 10000.f));
             f.resonance[i] = s.resonances[i];
         }
         return f;

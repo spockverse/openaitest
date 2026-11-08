@@ -56,16 +56,16 @@ jobs:
           Get-Content test-output.log
           if ($task_test_status -ne 0) { python tools/ci_error_annotation.py test-output.log }
           exit $task_test_status
-      - name: Check paced callback cost against v0.2.45
+      - name: Check paced callback cost against v0.2.46
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/Performance | Out-Null
           $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance v045 closed 7 timing-only
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance v046 closed 8 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance digital closed 8 timing-only
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance expressive closed 9 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($task_name in @('v045', 'digital')) {
+          foreach ($task_name in @('v046', 'expressive')) {
             $task_report = Get-Content "build/Performance/$task_name-callback.json" -Raw | ConvertFrom-Json
             Write-Output "$task_name peak=$($task_report.observedPeak) latency=$($task_report.latencySamples)"
             $task_report.cases | Select-Object sampleRate, buffer, meanUs, p99Us, maxUs | Format-Table
