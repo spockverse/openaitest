@@ -3,8 +3,8 @@
 #include <array>
 #include <cmath>
 
-// Variable-rate quantizer with anti-alias filtering and analogue-style DAC
-// reconstruction. The clock is controlled only by XY, never by the donor sample.
+// Variable-rate quantizer with optional anti-alias filtering and DAC reconstruction.
+// Native callers supply precision/rate targets; the clock retains its phase.
 class CleanCrusher
 {
     struct Lowpass

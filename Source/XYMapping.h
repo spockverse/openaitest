@@ -17,6 +17,13 @@ struct XYMapping
         const float horizontal=std::pow(std::abs(x),.35f),vertical=std::pow(std::abs(y),.65f);
         XYMapping result{16-14*horizontal,static_cast<float>(sampleRate*std::pow(minimumRate/sampleRate,vertical)),std::min(1.0f,length)};
         if(version>=3){const auto c=SignedCharacter::at(x,y);result.bits=std::clamp(result.bits+c.bitsOffset*horizontal,2.f,16.f);result.rate=std::clamp(result.rate*std::exp(c.logRate*vertical),minimumRate,float(sampleRate));}
+        if(version>=10&&y>0){
+            const float t=std::min(1.f,2*y),lower=t*t*(3-2*t),right=(1+std::tanh(3*x))*.5f;
+            // Lower-left is coarse precision; lower-right is a slower clock.
+            // Zero value and slope at the midline preserve the approved top half.
+            result.bits=std::clamp(result.bits-lower*(3.4f*(1-right)+.4f*right)*horizontal,2.f,16.f);
+            result.rate=std::clamp(result.rate*std::exp(-lower*(.2f*(1-right)+1.3f*right)*vertical),minimumRate,float(sampleRate));
+        }
         return result;
     }
 };

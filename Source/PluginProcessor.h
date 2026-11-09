@@ -90,7 +90,7 @@ private:
     std::array<float,DnaProfile::bins> fullEnvelope {};
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
-    std::atomic<int> xyMapping {9};
+    std::atomic<int> xyMapping {10};
     CrushDSP dsp;
     AudioReactivity visualAnalyser;
     AudioReactivityMailbox visualReadout;

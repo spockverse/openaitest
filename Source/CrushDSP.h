@@ -46,6 +46,7 @@ public:
         const bool controlFix=target.processingVersion>=7;
         const bool digitalRouting=target.processingVersion>=8;
         const bool expressiveXY=target.processingVersion>=9;
+        const bool deepControls=target.processingVersion>=10;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -129,15 +130,15 @@ public:
             tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact);
             if(sine){
                 const bool advanced=target.processingVersion>=6;
-                const float dnaShift=advanced?influence*(std::clamp(modernShape.logPeaks[0]-6.5510803f,-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
+                const float dnaShift=advanced?influence*(std::clamp((modernShape.logPeaks[deepControls?1:0]-6.5510803f)*(deepControls?.65f:1.f),-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix?0:dnaShift,controlFix?0:dnaMotion,digitalRouting,expressiveXY);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]);
                 // Reuse the broad tonal bank for continuous XY character and optional DNA.
                 const float right=std::clamp((current.signedX+1)*.5f,0.f,1.f),bottom=std::clamp((current.signedY+1)*.5f,0.f,1.f);
                 const float metal=right*(1-bottom),crunch=(1-right)*(1-bottom),robot=right*bottom;
                 const float coreColour=expressiveXY?std::sqrt(current.activity)*(.2f+.35f*metal+.15f*crunch+.1f*robot):0;
                 const float coreVowel=expressiveXY?std::clamp(.4f+.3f*current.signedX-.16f*current.signedY+.15f*articulation+.12f*brightness,0.f,1.f):.4f;
-                tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0,coreColour,coreVowel);
+                tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0,coreColour,coreVowel,deepControls);
                 if(controlFix){
                     const float depth=influence*(1.5f-.5f*influence);
                     const float driveDepth=driveUnit*(.5f+1.5f*driveUnit);
@@ -168,6 +169,8 @@ public:
             }
             if(digitalRouting)sineCrush.process(frame,channels,dry.data());
             tonal.processModern(frame,channels,controlFix&&(expressiveXY||influence>0||tonal.transformationActive())?sineCrush.foundation():nullptr);
+            const float lowerT=deepControls?std::clamp(2*current.signedY,0.f,1.f):0;
+            const float conditioningActivity=std::max(current.activity,lowerT*lowerT*(3-2*lowerT));
             for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
                 if(controlFix&&(digitalRouting||driveUnit>0||influence>0)){
                     // Bound the transformed body, preserving the complementary
@@ -175,7 +178,8 @@ public:
                     const float foundation=sineCrush.foundation()[c],body=frame[ch]-foundation;
                     const float room=std::max(.08f,1.f-std::abs(foundation)),ratio=body/room;
                     const float conditioned=foundation+body/std::sqrt(1+ratio*ratio);
-                    frame[ch]+=(digitalRouting?current.activity:std::max(driveUnit,influence))*(conditioned-frame[ch]);
+                    const float conditioning=deepControls?conditioningActivity+(1-conditioningActivity)*std::min(1.f,2*std::max(driveUnit,influence)):digitalRouting?current.activity:std::max(driveUnit,influence);
+                    frame[ch]+=conditioning*(conditioned-frame[ch]);
                 }
                 const float blend=std::min(1.f,current.activity*8)*current.mix;
                 const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;

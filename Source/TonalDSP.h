@@ -46,9 +46,10 @@ public:
         }
     }
     void setModern(float vowel, float amount, float mutation, const DnaTemporalFrame &shape, float warmth,
-                   int frames, bool impact=false, bool transform=false,float coreColour=0,float coreVowel=.4f) noexcept
+                   int frames, bool impact=false, bool transform=false,float coreColour=0,float coreVowel=.4f,bool deepen=false) noexcept
     {
-        std::array<float, 30> key{};
+        deep=deepen;
+        std::array<float, 31> key{};
         key[0] = vowel;
         key[1] = amount;
         key[2] = mutation;
@@ -66,6 +67,7 @@ public:
         key[cursor++] = impact ? 1.f : 0.f;
         key[cursor++] = transform ? 1.f : 0.f;
         key[cursor++] = coreColour;key[cursor++] = coreVowel;
+        key[cursor++] = deepen?1.f:0.f;
         if (modernPrimed && key == modernKey)
         {
             modern = modernGoal;
@@ -100,7 +102,7 @@ public:
         for (std::size_t b = 0; b < 3; ++b)
         {
             float referenceLog=shape.logPeaks[b];
-            if(transform)referenceLog=coreColour>0?5.0751738f+.65f*(referenceLog-4.0073332f)+std::log1p(.5f*vowel):std::log(110+std::exp(referenceLog)*(.22f+.78f*vowel));
+            if(transform)referenceLog=coreColour>0?5.0751738f+(deepen?.85f:.65f)*(referenceLog-4.0073332f)+std::log1p(.5f*vowel):std::log(110+std::exp(referenceLog)*(.22f+.78f*vowel));
             const float hz = std::clamp(
                 contrast > 0 ? std::exp(std::log(base[b]) * (1 - contrast) + referenceLog * contrast)
                              : base[b],
@@ -149,12 +151,13 @@ public:
                 bands += k * v1 * modern[6 + b];
             }
             float coloured = foundation ? x+modern[14]*(2.f*bands-.5f*body)+modern[13]*(2.3f*bands-.5f*body) : modern[12]>0 ? x*(1-.6f*modern[12])+(1.35f*modern[9]+1.8f*modern[12])*bands : x + 1.35f * modern[9] * bands;
+            if(deep&&foundation&&modern[13]>0)coloured=x+modern[14]*(2.f*bands-.5f*body)+modern[13]*(3.8f*bands-.85f*body);
             warmState[std::size_t(ch)] += modern[11] * (coloured - warmState[std::size_t(ch)]);
             frame[ch] = coloured + modern[10] * (warmState[std::size_t(ch)] - coloured);
         }
     }
 private:
-    std::array<float,15> modern{},modernStep{},modernGoal{};std::array<float,30> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false;
+    std::array<float,15> modern{},modernStep{},modernGoal{};std::array<float,31> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false,deep=false;
     double sampleRate=48000;float coefficient=.01f;bool primed=false;
     std::array<float,3> frequencies {};
     std::array<std::array<std::array<float,2>,3>,2> states {};
