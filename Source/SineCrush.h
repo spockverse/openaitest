@@ -25,7 +25,7 @@ public:
     void set(float x,float y,float activity,float bits,float rate,float drive,
              float protection,float articulation,int frames,bool enhanced=false,
              float dnaShift=0,float dnaMotion=0,bool correctedRouting=false,bool expressiveRouting=false,
-             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f) noexcept
+             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f,float pitchLog=0) noexcept
     {
         expressive=expressiveRouting;
         deepened=deepControls;
@@ -46,6 +46,7 @@ public:
             targetFrequency=std::clamp(targetFrequency,20.f,1600.f);
             depth=std::clamp(depth*(1-.6f*lower*(1-lowerRight))+.22f*crusherDrive*reach,0.f,.95f);
         }
+        if(pitchLog!=0)targetFrequency=std::clamp(targetFrequency*std::exp(pitchLog),20.f,1600.f);
         const float band=std::clamp(600+1000*right+600*articulation+800*dnaMotion,400.f,3200.f);
         const std::array<float,10> goal{targetFrequency,depth,
             1+drive*(2+6*drive),advanced?std::clamp(robot*reach*2,0.f,1.f):robot*activity,

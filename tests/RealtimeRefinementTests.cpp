@@ -170,7 +170,7 @@ int main()
                 p.setParameterValue("y", std::cos(i * .31f) * .7f);
                 p.setParameterValue("mutate", i % 4 ? 100 : 0);
                 p.setParameterValue("drive", float(i % 3) * 12);
-                p.setParameterValue("dnaSpeed", float(i % 5));
+                p.setParameterValue("dnaSpeed", float(i % 11)*.4f);p.setParameterValue("dnaPitch",float(i%49)-24);
                 auto ui = p.uiState(false);
                 require(!ui.hasProperty("waveform"), "Control telemetry serialized waveform");
                 juce::Thread::sleep(2);

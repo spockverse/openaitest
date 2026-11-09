@@ -89,10 +89,32 @@ static void checkRegionEditor()
     require(static_cast<bool>(restored.uiState()["editable"]),"project did not retain editable source");require(render(restored)==recalled,"region/speed recall changed audio");
     restored.setParameterValue("regionStart",.55f);restored.setParameterValue("regionEnd",1);restored.serviceRegionEdit();waitForSample(restored);require(render(restored)!=recalled,"region edit after reopen needs external WAV");
 }
+static void checkRhythmicHost()
+{
+    struct Clock:juce::AudioPlayHead {bool playing=true,ppqOnly=false,hasTempo=true;double bpm=120;juce::int64 sample=0;
+        juce::Optional<PositionInfo> getPosition()const override{PositionInfo p;p.setIsPlaying(playing);if(!ppqOnly)p.setTimeInSamples(sample);p.setPpqPosition(sample/48000.*bpm/60);if(hasTempo)p.setBpm(bpm);return p;}} clock;
+    WubrotProcessor p;p.loadSampleBytes(wav(),"rhythm.wav");waitForSample(p);p.setPlayHead(&clock);
+    auto block=[&](int n=128,int note=-1){juce::AudioBuffer<float>b(2,n);for(int ch=0;ch<2;++ch)for(int i=0;i<n;++i)b.setSample(ch,i,.2f);juce::MidiBuffer m;if(note>=0)m.addEvent(juce::MidiMessage::noteOn(1,48,juce::uint8(100)),note);p.processBlock(b,m);if(clock.playing)clock.sample+=n;return p.modulationPosition();};
+    for(double bpm:{80.,120.,174.}){clock.sample=0;clock.bpm=bpm;p.prepareToPlay(48000,128);p.setDnaRhythmValue(DnaTiming::value(2));for(int i=0;i<20;++i)block();const double expected=std::fmod((clock.sample-1)*bpm/(60*48000),1.);require(std::abs(p.modulationPosition()-expected)<1.e-8,"Actual processor rhythmic phase not sample-accurate");
+        clock.playing=false;const auto stop=block();for(int i=0;i<5;++i)require(block()==stop,"Stopped rhythmic processor moves");clock.playing=true;require(block()!=stop,"Rhythmic processor fails to resume");
+        clock.sample=48000;const auto seek=block();const double target=std::fmod((48000+127)*bpm/(60*48000),1.);require(std::abs(seek-target)<1.e-8,"Actual host seek not reflected by DSP playhead");
+        clock.sample=0;require(std::abs(block()-127*bpm/(60*48000))<1.e-8,"Host loop not anchored");}
+    clock.sample=0;clock.bpm=120;clock.ppqOnly=true;p.prepareToPlay(48000,128);for(int i=0;i<10;++i)block();require(std::abs(p.modulationPosition()-1279./24000)<1.e-8,"PPQ-only host synchronization failed");
+    clock.hasTempo=false;p.prepareToPlay(48000,128);block();require(double(p.uiState()["bpm"])==120&&!bool(p.uiState()["tempoKnown"]),"Missing-BPM fallback not documented in state");
+    p.setParameterValue("mode",1);p.prepareToPlay(48000,128);clock.sample=0;block(128,63);require(std::abs(p.modulationPosition()-64./24000)<1.e-8,"Processor MIDI offset retrigger incorrect");
+    for(int i=0;i<200;++i)block();require(p.modulationPosition()==1,"One-shot processor does not hold END");block(128,91);require(std::abs(p.modulationPosition()-36./24000)<1.e-8,"Next MIDI note failed to restart");
+    p.setParameterValue("dnaPitch",7);juce::MemoryBlock bytes;p.getStateInformation(bytes);WubrotProcessor restored;restored.setStateInformation(bytes.getData(),int(bytes.getSize()));waitForSample(restored);require(float(restored.uiState()["dnaPitch"])==7&&bool(restored.uiState()["dnaSync"]),"Pitch/rhythmic project state lost");
+    require(restored.parameters.getParameter("dnaSpeed")->convertFrom0to1(.5f)==2,"SPEED normalized automation domain changed");
+    auto legacyXml=juce::AudioProcessor::getXmlFromBinary(bytes.getData(),int(bytes.getSize()));legacyXml->setAttribute("xyMapping",10);legacyXml->removeAttribute("dnaSync");
+    for(auto* c=legacyXml->getFirstChildElement();c;){auto* next=c->getNextElement();if(c->getStringAttribute("id")=="dnaPitch")legacyXml->removeChildElement(c,true);else if(c->getStringAttribute("id")=="dnaSpeed")c->setAttribute("value",2);c=next;}
+    juce::MemoryBlock legacyBytes;juce::AudioProcessor::copyXmlToBinary(*legacyXml,legacyBytes);WubrotProcessor legacy;legacy.setStateInformation(legacyBytes.getData(),int(legacyBytes.getSize()));waitForSample(legacy);
+    require(!bool(legacy.uiState()["dnaSync"])&&float(legacy.uiState()["dnaPitch"])==0&&float(legacy.uiState()["dnaSpeed"])==2&&legacy.parameters.getParameter("dnaSpeed")->getText(.5f,32)=="LEGACY","Legacy timing/automation/default pitch migration failed");
+    legacy.setDnaRhythmValue(DnaTiming::value(2));require(bool(legacy.uiState()["dnaSync"])&&legacy.parameters.getParameter("dnaSpeed")->getText(.2f,32)=="1/4","Legacy instance cannot opt in to rhythmic timing");p.setPlayHead(nullptr);
+}
 static void checkHostClock()
 {
     struct Clock:juce::AudioPlayHead { bool playing=false;juce::int64 samples=0;juce::Optional<PositionInfo> getPosition()const override{PositionInfo p;p.setIsPlaying(playing);p.setTimeInSamples(samples);return p;} } clock;
-    WubrotProcessor p;p.loadSampleBytes(wav(),"clock.wav");waitForSample(p);p.prepareToPlay(48000,128);p.setPlayHead(&clock);
+    WubrotProcessor p;p.dnaSync.store(false);p.setParameterValue("dnaSpeed",2);p.loadSampleBytes(wav(),"clock.wav");waitForSample(p);p.prepareToPlay(48000,128);p.setPlayHead(&clock);
     auto block=[&](bool audio){juce::AudioBuffer<float> buffer(2,128);buffer.clear();if(audio)for(int ch=0;ch<2;++ch)for(int i=0;i<128;++i)buffer.setSample(ch,i,.2f);juce::MidiBuffer midi;p.processBlock(buffer,midi);if(clock.playing)clock.samples+=128;return static_cast<double>(p.uiState()["playhead"]);};
     for(int i=0;i<10;++i)require(std::abs(block(true))<1e-15,"stopped DAW moved playhead");
     clock.playing=true;for(int i=0;i<10;++i)block(true);const auto moving=block(true);require(moving>0,"playing DAW did not move playhead");
@@ -170,6 +192,7 @@ int main()
     {
         checkVisualObserver();
         checkHostClock();
+        checkRhythmicHost();
         checkLoadingRoutes();
         checkDnaRouting();
         checkRegionEditor();

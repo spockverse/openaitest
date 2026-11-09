@@ -105,8 +105,8 @@ int main(int argc, char **argv)
         std::filesystem::create_directories(dir);
         const juce::String label = argc > 2 ? argv[2] : "current";
         const bool ui = argc > 3 && std::string(argv[3]) == "ui";
-        const int model=argc>4?std::stoi(argv[4]):10;
-        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7&&model!=8&&model!=9&&model!=10)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6, 7, 8, 9 or 10");
+        const int model=argc>4?std::stoi(argv[4]):11;
+        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7&&model!=8&&model!=9&&model!=10&&model!=11)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6, 7, 8, 9, 10 or 11");
         std::ofstream report(dir / (label.toStdString() + "-callback.json"));
         report << "{\"label\":\"" << label << "\",\"cpu\":\"" << juce::SystemStats::getCpuVendor() << " "
                << juce::SystemStats::getCpuModel() << "\",\"logicalCpus\":" << juce::SystemStats::getNumCpus()
@@ -117,9 +117,10 @@ int main(int argc, char **argv)
         WubrotProcessor p;
         juce::MemoryBlock state;p.getStateInformation(state);
         auto xml=juce::AudioProcessor::getXmlFromBinary(state.getData(),int(state.getSize()));
-        xml->setAttribute("xyMapping",model);juce::AudioProcessor::copyXmlToBinary(*xml,state);
+        xml->setAttribute("xyMapping",model);xml->setAttribute("dnaSync",model>=11?1:0);juce::AudioProcessor::copyXmlToBinary(*xml,state);
         p.setStateInformation(state.getData(),int(state.getSize()));
         if(int(p.uiState()["xyMapping"])!=model)throw std::runtime_error("Requested benchmark model was not applied");
+        if(model<11)p.setParameterValue("dnaSpeed",2);
         p.setParameterValue("x", .55f);
         p.setParameterValue("y", -.45f);
         p.setParameterValue("drive", 12);

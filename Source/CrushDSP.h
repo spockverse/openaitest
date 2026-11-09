@@ -5,6 +5,7 @@
 #include "CleanCrusher.h"
 #include "SignedCharacter.h"
 #include "SineCrush.h"
+#include "DnaTiming.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -15,7 +16,8 @@ public:
     struct Parameters
     {
         float drive=12,bits=8,rate=12000,mix=.65f,output=-6,protect=1;
-        float mutate=0,speed=1,activity=1,signedX=0,signedY=0;int processingVersion=2;bool centered=false;bool enabled=true,patternEnabled=true,inputActive=true;int mode=0;
+        float mutate=0,speed=1,activity=1,signedX=0,signedY=0,pitch=0;double bpm=120,regionBeats=1;
+        int processingVersion=2;bool centered=false;bool enabled=true,patternEnabled=true,inputActive=true,rhythmic=false,audioTriggers=true;int mode=0;
     };
     void prepare(double sr)
     {
@@ -26,13 +28,15 @@ public:
         colourCoefficient=1-std::exp(-2*pi*1800/static_cast<float>(sampleRate));
         excitationHighpass=1-std::exp(-2*pi*180/static_cast<float>(sampleRate));
         dcCoefficient=std::exp(-2*pi*12/static_cast<float>(sampleRate));detectorRelease=std::exp(-1/static_cast<float>(sampleRate*.04));
-        nonlinear.prepare();crusher.prepare(sampleRate);tonal.prepare(sampleRate);sineCrush.prepare(sampleRate);controlInterval=std::max(1,int(sampleRate/250));reset();
+        nonlinear.prepare();crusher.prepare(sampleRate);tonal.prepare(sampleRate);sineCrush.prepare(sampleRate);rhythm.prepare(sampleRate);onset.prepare(sampleRate);controlInterval=std::max(1,int(sampleRate/250));reset();
     }
     void reset()
     {
-        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;activityHold=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;resetModulation();
+        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;activityHold=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;pendingRhythmTrigger=false;resetModulation();
     }
-    void resetModulation()noexcept{retriggerTime=retriggerPatternTime=0;modulation=0;detector=0;refractory=0;retriggerArmed=false;}
+    void resetModulation()noexcept{retriggerTime=retriggerPatternTime=0;modulation=0;detector=0;refractory=0;retriggerArmed=false;rhythm.reset();onset.reset();}
+    void seekRhythm(double ppq,double beats,int mode)noexcept{rhythm.seek(ppq,beats,mode);controlRemaining=0;}
+    void triggerRhythm(bool midi=true)noexcept{pendingRhythmTrigger=true;pendingMidi=midi;}
     void setTimeline(double seconds)noexcept{seconds=std::max(0.0,seconds);if(std::abs(seconds-loopTime)>2/sampleRate)loopPatternTime=seconds*current.speed;loopTime=seconds;}
     void seekPattern(double seconds,float speed)noexcept{loopPatternTime=std::max(0.0,seconds)*speed;}
     void noteOn()noexcept{patternPosition=0;retriggerTime=retriggerPatternTime=0;retriggerArmed=true;refractory=static_cast<int>(sampleRate*.05);}
@@ -47,6 +51,7 @@ public:
         const bool digitalRouting=target.processingVersion>=8;
         const bool expressiveXY=target.processingVersion>=9;
         const bool deepControls=target.processingVersion>=10;
+        const bool dnaRefinement=target.processingVersion>=11;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -59,30 +64,35 @@ public:
         smooth(current.rate,std::clamp(target.rate,digitalRouting?32.0f:500.0f,static_cast<float>(sampleRate)));
         if(modern){const float m=std::clamp(target.mix,0.f,1.f),stepMix=1/float(sampleRate*.02);current.mix+=std::clamp(m-current.mix,-stepMix,stepMix);}else smooth(current.mix,std::clamp(target.mix,0.0f,1.0f));smooth(current.output,std::clamp(target.output,-24.0f,6.0f));
         smooth(current.protect,std::clamp(target.protect,0.0f,1.0f));if(modern){const float m=std::clamp(target.mutate,0.f,1.f),stepM=1/float(sampleRate*.02);current.mutate+=std::clamp(m-current.mutate,-stepM,stepM);}else smooth(current.mutate,std::clamp(target.mutate,0.0f,1.0f));smooth(current.speed,std::clamp(target.speed,.25f,4.0f));
+        smooth(current.pitch,std::clamp(target.pitch,-24.f,24.f));
         if(current.mode!=target.mode){current.mode=target.mode;resetModulation();}
-        float peak=0,high=0;
+        float peak=0,high=0,energy=0;
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
             if(!std::isfinite(frame[ch]))frame[ch]=0;
             peak=std::max(peak,std::abs(frame[ch]));
+            energy=std::max(energy,frame[ch]*frame[ch]);
             colour[static_cast<std::size_t>(ch)]+=colourCoefficient*(frame[ch]-colour[static_cast<std::size_t>(ch)]);
             high=std::max(high,std::abs(frame[ch]-colour[static_cast<std::size_t>(ch)]));
         }
         if(refractory>0)--refractory;
-        if(target.patternEnabled&&current.mode==1&&refractory==0&&peak>.015f&&peak>detector*1.8f+.008f)noteOn();
+        if(!target.rhythmic&&target.patternEnabled&&current.mode==1&&refractory==0&&peak>.015f&&peak>detector*1.8f+.008f)noteOn();
+        if(target.rhythmic){rhythm.configure(target.bpm,target.regionBeats);const bool hit=onset.observe(energy);if(hit&&target.patternEnabled&&current.mode==1&&target.audioTriggers)triggerRhythm(false);}
+        if(target.rhythmic&&pendingRhythmTrigger){rhythm.trigger();controlRemaining=0;if(pendingMidi)onset.midi();pendingRhythmTrigger=false;}
         detector=std::max(peak,detector*detectorRelease);
         fast+=(peak>fast?attackCoefficient:releaseCoefficient)*(peak-fast);slow+=slowCoefficient*(peak-slow);
         brightness+=modulationCoefficient*(std::clamp(high/(fast+.002f),0.0f,1.0f)-brightness);
         const bool loaded=dna&&dna->valid;
-        const bool running=loaded&&(current.mode==0||(retriggerArmed&&retriggerPatternTime<dna->duration));
+        const bool running=loaded&&(current.mode==0||(target.rhythmic?rhythm.isArmed():(retriggerArmed&&retriggerPatternTime<dna->duration)));
         if(peak>1.0e-5f)activityHold=static_cast<int>(sampleRate*.002);else if(activityHold>0)--activityHold;
-        const bool advancing=target.patternEnabled&&target.inputActive&&activityHold>0;
-        if(loaded&&advancing)patternPosition=current.mode==1&&retriggerPatternTime>=dna->duration?1.0:std::fmod((current.mode==0?loopPatternTime:retriggerPatternTime)/dna->duration,1.0);
+        const bool advancing=target.patternEnabled&&(target.rhythmic||(target.inputActive&&activityHold>0));
+        if(loaded&&target.rhythmic)patternPosition=rhythm.position();
+        else if(loaded&&advancing)patternPosition=current.mode==1&&retriggerPatternTime>=dna->duration?1.0:std::fmod((current.mode==0?loopPatternTime:retriggerPatternTime)/dna->duration,1.0);
         else if(!loaded)patternPosition=0;
-        const float env=running?dna->at(advancing?(current.mode==0?loopPatternTime:retriggerPatternTime):patternPosition*dna->duration):0;
+        const float env=running?(target.rhythmic?dna->atPosition(float(patternPosition)):dna->at(advancing?(current.mode==0?loopPatternTime:retriggerPatternTime):patternPosition*dna->duration)):0;
         modulation+=modulationCoefficient*(env-modulation);
         dnaPresence+=modulationCoefficient*((loaded?1.0f:0.0f)-dnaPresence);
-        const float influence=current.mutate*(modern&&!loaded?0:dnaPresence);
+        const float influence=(dnaRefinement?current.mutate*(2-current.mutate):current.mutate)*(modern&&!loaded?0:dnaPresence);
         const bool updateControl=modern&&controlRemaining<=0;
         if(updateControl){modernShape=loaded&&influence>0?dna->spectralAt(float(patternPosition)):DnaTemporalFrame{};modernCharacter=SignedCharacter::at(current.signedX,current.signedY,impact?4.f:2.f);}
         if(!modern){
@@ -127,18 +137,19 @@ public:
             if(!controlPrimed){modernControl=controlGoal;controlPrimed=true;}
             for(std::size_t i=0;i<modernControl.size();++i)modernStep[i]=(controlGoal[i]-modernControl[i])/float(controlInterval);
             crusher.setModern(current.bits,current.rate,modernCharacter.antiAlias,modernCharacter.rebuild,controlInterval);
-            tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact);
+            tonal.setModern(impact?std::clamp(vowel+.25f*current.signedX-.2f*current.signedY,0.f,1.f):vowel,.12f+modernCharacter.shaper*.38f,influence,modernShape,modernCharacter.warmth,controlInterval,impact,false,0,.4f,false,false,current.pitch);
             if(sine){
                 const bool advanced=target.processingVersion>=6;
                 const float dnaShift=advanced?influence*(std::clamp((modernShape.logPeaks[deepControls?1:0]-6.5510803f)*(deepControls?.65f:1.f),-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]);
+                const float pitchLog=current.pitch*.057762265f;
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+pitchLog,deepControls?0:pitchLog*influence);
                 // Reuse the broad tonal bank for continuous XY character and optional DNA.
                 const float right=std::clamp((current.signedX+1)*.5f,0.f,1.f),bottom=std::clamp((current.signedY+1)*.5f,0.f,1.f);
                 const float metal=right*(1-bottom),crunch=(1-right)*(1-bottom),robot=right*bottom;
                 const float coreColour=expressiveXY?std::sqrt(current.activity)*(.2f+.35f*metal+.15f*crunch+.1f*robot):0;
                 const float coreVowel=expressiveXY?std::clamp(.4f+.3f*current.signedX-.16f*current.signedY+.15f*articulation+.12f*brightness,0.f,1.f):.4f;
-                tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0,coreColour,coreVowel,deepControls);
+                tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0,coreColour,coreVowel,deepControls,dnaRefinement,current.pitch);
                 if(controlFix){
                     const float depth=influence*(1.5f-.5f*influence);
                     const float driveDepth=driveUnit*(.5f+1.5f*driveUnit);
@@ -187,6 +198,7 @@ public:
             }
             loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;
             if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
+            if(target.rhythmic&&loaded)rhythm.advance(target.patternEnabled,current.mode);
             return;
         }
         const int tail=static_cast<int>(sampleRate*.08);
@@ -217,7 +229,7 @@ public:
             const float dc=driven-dcInput[c]+dcCoefficient*dcOutput[c];dcInput[c]=driven;dcOutput[c]=dc;
             frame[ch]=dc;
         }
-        if(modern)tonal.processModern(frame,channels);else tonal.process(frame,channels,vowel,2.2f+influence*(3.0f*(1-rough)+crest),drive*(.5f+.45f*influence),signature,influence);
+        if(modern)tonal.processModern(frame,channels);else tonal.process(frame,channels,vowel,2.2f+influence*(3.0f*(1-rough)+crest),drive*(.5f+.45f*influence),signature,influence,current.pitch);
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
             const auto c=static_cast<std::size_t>(ch);
@@ -238,6 +250,7 @@ public:
             frame[ch]=bypassWet<=0?original[c]:bypassWet>=1?processed:original[c]+bypassWet*(processed-original[c]);
         }
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
+        if(target.rhythmic&&loaded)rhythm.advance(target.patternEnabled,current.mode);
     }
 private:
     friend struct DigitalRoutingProbe;
@@ -255,5 +268,6 @@ private:
     int controlInterval=192,controlRemaining=0;bool controlPrimed=false;
     DnaTemporalFrame modernShape;SignedCharacter modernCharacter;std::array<float,6> modernControl{},modernStep{};
     Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;SineCrush sineCrush;
+    DnaRhythmClock rhythm;DnaOnset onset;bool pendingRhythmTrigger=false,pendingMidi=false;
     std::array<float,2> low{},dcInput{},dcOutput{},colour{};
 };

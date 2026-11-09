@@ -7,7 +7,7 @@ const{chromium}=require(process.env.WUBROT_PLAYWRIGHT||'playwright');const fs=re
  const wave=await p.locator('#waveEditor').boundingBox(),start=await p.locator('#regionStart').boundingBox();await p.mouse.move(start.x+start.width/2,start.y+start.height/2);await p.mouse.down();await p.mouse.move(wave.x+wave.width*.4,start.y+start.height/2);await p.mouse.up();
  assert(await p.evaluate(()=>messages.some(m=>m.id==='regionStart'&&m.type==='parameter'&&Math.abs(m.value-.4)<.02)));
  await p.locator('#regionEnd').focus();await p.keyboard.press('ArrowLeft');assert(await p.evaluate(()=>messages.some(m=>m.id==='regionEnd'&&m.type==='parameter'&&Math.abs(m.value-.74)<.02)));
- for(let i=0;i<5;++i){await p.locator('#dnaSpeed').click();await p.locator(`[data-speed="${i}"]`).click();assert(await p.evaluate(i=>messages.some(m=>m.id==='dnaSpeed'&&m.value===i),i));}
+ for(let i=0;i<5;++i){await p.locator('#dnaSpeed').click();await p.locator(`[data-speed="${i}"]`).click();assert(await p.evaluate(i=>messages.some(m=>m.id==='dnaSpeed'&&Math.abs(m.value-i*.4)<1e-6),i));}
  await p.locator('#regionLoop').click();assert(await p.evaluate(()=>messages.some(m=>m.id==='mode'&&m.value===1)));
  assert.equal(choosers,0);const play=await p.locator('#regionPlayhead').boundingBox();assert(play.x>=wave.x&&play.x<=wave.x+wave.width);
  const footer=await p.locator('.bottom').boundingBox();assert(footer.y+footer.height<height-10);

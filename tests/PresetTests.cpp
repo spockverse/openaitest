@@ -179,7 +179,7 @@ int main()
         const auto before = render(p);
         require(p.importPreset(corrupt, "Bad", false).failed(), "malformed preset accepted");
         require(render(p) == before, "rejected import modified audio");
-        auto version = text.replace("formatVersion=\"10\"", "formatVersion=\"999\"");
+        auto version = text.replace("formatVersion=\"11\"", "formatVersion=\"999\"");
         corrupt.replaceWithText(version);
         require(PresetLibrary::read(corrupt, state, name).failed(), "future version accepted");
         require(PresetLibrary::read(file, state, name).wasOk(), "valid file not readable");
@@ -253,7 +253,8 @@ int main()
         const juce::StringArray expectedIds{"x",       "y",           "mutate",    "drive",
                                             "mode",    "mix",         "output",    "protect",
                                             "enabled", "regionStart", "regionEnd", "dnaSpeed"};
-        require(emptyRestore.getParameters().size() == 12, "parameter count changed");
+        require(emptyRestore.getParameters().size() == 13, "parameter count changed");
+        require(dynamic_cast<juce::RangedAudioParameter*>(emptyRestore.getParameters()[12])->getParameterID()=="dnaPitch","Pitch was not appended after existing IDs");
         for (int i = 0; i < 12; ++i)
         {
             auto *parameter = dynamic_cast<juce::RangedAudioParameter *>(emptyRestore.getParameters()[i]);
@@ -263,6 +264,8 @@ int main()
         require(emptyRestore.getNumPrograms() == 3 &&
                     emptyRestore.parameters.getParameter("dnaSpeed")->getParameterID() == "dnaSpeed",
                 "host programs or parameter identity changed");
+        emptyRestore.setParameterValue("dnaPitch",7);emptyRestore.setDnaRhythmValue(DnaTiming::value(7));require(emptyRestore.saveUserPreset("Pitch timing").wasOk(),"Pitch/rhythm preset save failed");
+        WubrotProcessor pitchRecall(docs);require(pitchRecall.loadUserPreset("Pitch timing.wubpreset").wasOk(),"Pitch/rhythm preset load failed");require(float(pitchRecall.uiState()["dnaPitch"])==7&&bool(pitchRecall.uiState()["dnaSync"])&&int(pitchRecall.uiState()["dnaRhythm"])==7&&!pitchRecall.hasUnsavedPresetChanges(),"Pitch/rhythm preset recall/dirty state failed");
         std::cout << "PASS: Documents lookup, names/traversal, CRUD, conflicts, atomic validation, "
                      "import/export, compact analysis-only exact recall, editable regions/speed/retrigger, "
                      "independent instances/projects, dirty checks and malformed-file rejection\n";

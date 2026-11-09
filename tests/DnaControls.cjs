@@ -1,7 +1,7 @@
 const { chromium } = require(process.env.WUBROT_PLAYWRIGHT || 'playwright');
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '../prototype/WUBROT.html'), 'utf8');
-const speeds = ['0.25×', '0.5×', '1×', '2×', '4×'];
+const speeds = ['1/1','1/2','1/4','1/8D','1/8','1/16D','1/8T','1/16','1/16T','1/32','1/64'];
 async function checkSpeed(p, index) {
   await p.waitForFunction(index => document.getElementById('dnaSpeedKnob').getAttribute('aria-valuenow') === String(index), index);
   assert(await p.evaluate(() => scrollX === 0 && scrollY === 0 && document.querySelector('.shell').getBoundingClientRect().top === 0), 'Interaction scrolled the fixed editor');
@@ -9,9 +9,10 @@ async function checkSpeed(p, index) {
   assert.equal(await p.locator('#dnaSpeedKnob').getAttribute('aria-valuetext'), speeds[index]);
   assert.equal(await p.locator('#dnaSpeedValue').textContent(), speeds[index]);
   assert.equal(await p.locator('[data-speed][aria-selected=true]').getAttribute('data-speed'), String(index));
-  assert.equal(await p.locator('#dnaSpeedKnob').evaluate(el => el.style.getPropertyValue('--turn')), `${index / 4 * 270}deg`);
+  assert.equal(await p.locator('#dnaSpeedKnob').evaluate(el => el.style.getPropertyValue('--turn')), `${index / 10 * 270}deg`);
 }
 async function recall(p, values) {
+  if(Number.isFinite(values.dnaSpeed)){values.dnaRhythm=values.dnaSpeed;values.dnaSpeed=values.dnaRhythm*4/10;}
   await p.evaluate(values => { Object.assign(state, values); messages = []; listeners.wubrotState(state); }, values);
   assert.equal(await p.evaluate(() => messages.length), 0, 'Host state echoed into automation');
 }
@@ -36,7 +37,7 @@ async function assertGesture(p) {
       await p.evaluate(() => {
         window.listeners = {}; window.messages = [];
         window.state = { enabled: 1, x: 0, y: 0, mutate: 67, drive: 8.5, mode: 0, regionStart: .25, regionEnd: .75,
-          dnaSpeed: 2, editable: true, name: 'synthetic.wav', sampleRate: 48000, playhead: .4,
+          dnaSpeed: .8, dnaRhythm:2, dnaSync:true, dnaPitch:0, editable: true, name: 'synthetic.wav', sampleRate: 48000, playhead: .4,
           status: 'Selected region shapes the distortion.', waveform: Array.from({ length: 128 }, (_, i) => .1 + .8 * Math.abs(Math.sin(i * .23))) };
         window.__JUCE__ = { backend: { addEventListener: (id, f) => listeners[id] = f, emitEvent: (id, e) => {
           messages.push(e); if (e.type === 'ready') listeners.wubrotState(state);
@@ -44,10 +45,10 @@ async function assertGesture(p) {
       });
       await p.setContent(html);
       assert.equal(await p.locator('#dnaLoop,#dnaRetrigger,.dna-mode,#speedDown,#speedUp,select#dnaSpeed').count(), 0);
-      assert.equal(await p.locator('.dna-speed-knob').count(), 1);
+      assert.equal(await p.locator('.dna-speed-knob').count(), 2);
       assert.equal(await p.locator('#regionLoop').count(), 1);
       await checkSpeed(p, 2);
-      const selectors = ['.region-nudge', '#dnaSpeedKnob', '#speedSelect', '#regionLoop'];
+      const selectors = ['.speed-control', '.pitch-control'];
       const row = await p.locator('#regionToolbar').boundingBox();
       const drop = await p.locator('#drop').boundingBox();
       let previous = null;
@@ -65,7 +66,7 @@ async function assertGesture(p) {
       assert(engine.y + engine.height <= (await p.locator('.bottom').boundingBox()).y + .1, 'New controls push engine into footer');
 
       // All supported choices use the existing parameter and a single closed gesture.
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < speeds.length; i++) {
         await p.evaluate(() => messages = []);
         await p.locator('#dnaSpeed').click();
         await p.waitForTimeout(200);
@@ -99,9 +100,20 @@ async function assertGesture(p) {
       await p.evaluate(() => messages = []); await p.mouse.move(x, y); await p.mouse.wheel(0, 100);
       await checkSpeed(p, 2); await assertGesture(p);
       await p.locator('#dnaSpeedKnob').focus(); await p.keyboard.press('Home'); await checkSpeed(p, 0);
-      await p.keyboard.press('ArrowRight'); await checkSpeed(p, 1); await p.keyboard.press('End'); await checkSpeed(p, 4);
+      await p.keyboard.press('ArrowRight'); await checkSpeed(p, 1); await p.keyboard.press('End'); await checkSpeed(p, 10);
       await p.locator('#dnaSpeedKnob').dblclick(); await checkSpeed(p, 2);
 
+      for(const id of ['speedLabel','pitchLabel'])assert(await p.locator('#'+id).evaluate((el,scale)=>parseFloat(getComputedStyle(el).fontSize)*scale>=11,scale),'Unreadable control label');
+      await p.evaluate(()=>messages=[]);
+      await p.locator('#dnaPitchKnob').focus();await p.keyboard.press('ArrowUp');
+      assert.equal(await p.locator('#dnaPitchValue').textContent(),'+1 st');
+      assert(await p.evaluate(()=>messages.some(m=>m.id==='dnaPitch'&&m.type==='parameter'&&m.value===1)));
+      await recall(p,{dnaPitch:-12});assert.equal(await p.locator('#dnaPitchValue').textContent(),'-12 st');
+      await p.locator('#dnaPitchKnob').dblclick();assert.equal(await p.locator('#dnaPitchValue').textContent(),'0 st');
+      const pitch=await p.locator('#dnaPitchKnob').boundingBox();
+      await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2);await p.mouse.down();await p.keyboard.down('Shift');await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2-40*scale,{steps:10});await p.mouse.up();await p.keyboard.up('Shift');
+      assert.equal(await p.locator('#dnaPitchValue').textContent(),'+1 st');
+      const pitchEvents=await p.evaluate(()=>messages.filter(m=>m.id==='dnaPitch'));assert(pitchEvents.some(m=>m.type==='gesture'&&m.start)&&pitchEvents.some(m=>m.type==='gesture'&&!m.start));
       // One cyan switch: LOOP left, RETRIGGER right, same illuminated color.
       await recall(p, { mode: 0, dnaSpeed: 0 });
       const litColor = await p.locator('.mode-loop').evaluate(el => getComputedStyle(el).color);
@@ -115,7 +127,7 @@ async function assertGesture(p) {
       assert.equal(await p.locator('.mode-retrigger').evaluate(el => getComputedStyle(el).color), litColor);
       assert.equal(await p.locator('#regionLoop i').evaluate(el => getComputedStyle(el, ':after').transform), 'matrix(1, 0, 0, 1, 16, 0)');
       assert(await p.evaluate(() => messages.some(m => m.type === 'parameter' && m.id === 'mode' && m.value === 1)));
-      for (let i = 0; i < 5; i++) { await recall(p, { dnaSpeed: i, mode: i % 2 }); await checkSpeed(p, i); assert.equal(await p.locator('#regionLoop').getAttribute('aria-checked'), String(!!(i % 2))); }
+      for (let i = 0; i < speeds.length; i++) { await recall(p, { dnaSpeed: i, mode: i % 2 }); await checkSpeed(p, i); assert.equal(await p.locator('#regionLoop').getAttribute('aria-checked'), String(!!(i % 2))); }
 
       // OFF retains operable controls, neutral lighting, profile and parameters.
       await recall(p, { enabled: 0, dnaSpeed: 4, mode: 1 }); await p.waitForTimeout(300); await checkSpeed(p, 4);

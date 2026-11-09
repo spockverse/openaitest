@@ -12,7 +12,7 @@ public:
     ~WubrotProcessor() override;
     void prepareToPlay(double, int) override;
     void releaseResources() override {}
-    void reset() override { dsp.reset(); visualAnalyser.reset(); visualReadout.clear(); expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
+    void reset() override { dsp.reset(); visualAnalyser.reset(); visualReadout.clear(); expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
     bool isBusesLayoutSupported(const BusesLayout&) const override;
     using AudioProcessor::processBlock;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -31,6 +31,7 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
     void setParameterValue(const juce::String&, float);
+    void setDnaRhythmValue(float);
     void parameterGesture(const juce::String&, bool);
     void loadSampleBytes(juce::MemoryBlock, juce::String);
     void loadSampleFile(const juce::File&, bool factoryPreset = false);
@@ -57,9 +58,10 @@ public:
     juce::var presetCatalogue();
     int presetLibraryRevision()const noexcept { return libraryRevision.load(); }
     bool isPresetBusy()const noexcept { return presetBusy.load(); }
+    std::atomic<bool> dnaSync {true};
     juce::AudioProcessorValueTreeState parameters;
 private:
-    static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();
+    static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters(std::atomic<bool>*);
     juce::ValueTree captureState(bool includeSourceAudio);
     juce::String soundSignature();
     void markPresetClean();
@@ -90,13 +92,13 @@ private:
     std::array<float,DnaProfile::bins> fullEnvelope {};
     float analysedStart=0,analysedEnd=1;
     std::atomic<double> patternPosition {0};
-    std::atomic<int> xyMapping {10};
+    std::atomic<int> xyMapping {11};
     CrushDSP dsp;
     AudioReactivity visualAnalyser;
     AudioReactivityMailbox visualReadout;
     double lastVisualBlockMs=-1, lastVisualBlockDurationMs=0;
     DnaExchange profiles;
-    std::array<std::atomic<float>*, 12> values;
+    std::array<std::atomic<float>*, 13> values;
     juce::CriticalSection metadataLock; // Never used by processBlock.
     juce::String sampleName, status { "Load a WAV into ROT DNA." };
     juce::ThreadPool sampleJobs { 1 };
@@ -105,6 +107,8 @@ private:
     std::atomic<int> presetRequest { -1 }, currentPreset { 0 };
     std::atomic<double> runningRate { 44100 };
     bool lastTransportPlaying=false;
+    std::atomic<double> hostTempo {120};std::atomic<bool> tempoAvailable {false};
+    double expectedPpq=-1,lastPpq=-1;
     juce::int64 lastReportedSample=-1, expectedSample = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WubrotProcessor)
 };

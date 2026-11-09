@@ -10,16 +10,16 @@ constexpr std::size_t maxSampleBytes = 20 * 1024 * 1024;
 WubrotProcessor::WubrotProcessor(juce::File documentsForTests)
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters(*this, nullptr, "WubrotState", makeParameters()), presetLibrary(documentsForTests),
+      parameters(*this, nullptr, "WubrotState", makeParameters(&dnaSync)), presetLibrary(documentsForTests),
       values { parameters.getRawParameterValue("x"), parameters.getRawParameterValue("y"),
                parameters.getRawParameterValue("mutate"), parameters.getRawParameterValue("drive"),
                parameters.getRawParameterValue("mode"), parameters.getRawParameterValue("mix"),
                parameters.getRawParameterValue("output"), parameters.getRawParameterValue("protect"),
                parameters.getRawParameterValue("enabled"), parameters.getRawParameterValue("regionStart"),
-               parameters.getRawParameterValue("regionEnd"),parameters.getRawParameterValue("dnaSpeed") }
+               parameters.getRawParameterValue("regionEnd"),parameters.getRawParameterValue("dnaSpeed"),parameters.getRawParameterValue("dnaPitch") }
 { markPresetClean(); startTimerHz(20); }
 WubrotProcessor::~WubrotProcessor() { stopTimer(); stopping.store(true); generation.fetch_add(1); presetJobs.removeAllJobs(true,-1); sampleJobs.removeAllJobs(true, -1); }
-juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParameters()
+juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParameters(std::atomic<bool>* sync)
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     auto add = [&](const char* id, const char* name, float lo, float hi, float initial, const char* unit) {
@@ -33,10 +33,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "protect", 1 }, "Keep Sub", true));
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { "enabled", 1 }, "Engine On", true));
     add("regionStart","DNA Start",0,1,0,"");add("regionEnd","DNA End",0,1,1,"");
-    p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID {"dnaSpeed",1},"DNA Speed",juce::StringArray{"0.25x","0.5x","1x","2x","4x"},2));
+    p.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"dnaSpeed",1},"DNA Speed",juce::NormalisableRange<float>(0,4),DnaTiming::value(DnaTiming::defaultIndex),juce::AudioParameterFloatAttributes().withStringFromValueFunction([sync](float v,int){return sync->load()?juce::String(DnaTiming::labels[DnaTiming::index(v)]):juce::String("LEGACY");}).withValueFromStringFunction([](const juce::String& text){for(int i=0;i<DnaTiming::count;++i)if(text.trim().equalsIgnoreCase(DnaTiming::labels[i]))return DnaTiming::value(i);return juce::jlimit(0.f,4.f,text.getFloatValue());})));
+    p.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"dnaPitch",1},"DNA Pitch",juce::NormalisableRange<float>(-24,24,.01f),0,juce::AudioParameterFloatAttributes().withLabel("st")));
     return p;
 }
-void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); visualAnalyser.prepare(rate); visualReadout.clear(); lastVisualBlockMs=juce::Time::getMillisecondCounterHiRes();lastVisualBlockDurationMs=0; expectedSample = lastReportedSample = -1;lastTransportPlaying=false;patternPosition.store(0); }
+void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); visualAnalyser.prepare(rate); visualReadout.clear(); lastVisualBlockMs=juce::Time::getMillisecondCounterHiRes();lastVisualBlockDurationMs=0; expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
 bool WubrotProcessor::isBusesLayoutSupported(const BusesLayout& b) const
 {
     const auto out = b.getMainOutputChannelSet();
@@ -51,7 +52,7 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if(lastVisualBlockMs>=0&&visualNow-lastVisualBlockMs>std::max(120.0,lastVisualBlockDurationMs*3))
     { visualAnalyser.reset(); visualReadout.clear(); }
     lastVisualBlockMs=visualNow;lastVisualBlockDurationMs=buffer.getNumSamples()*1000.0/runningRate.load();
-    if(resetProfileClock.exchange(false))dsp.resetModulation();
+    if(resetProfileClock.exchange(false)){dsp.resetModulation();if(dnaSync.load()){expectedSample=-1;expectedPpq=-1;}}
     float x = values[0]->load(), y = values[1]->load();
     CrushDSP::Parameters p;
     const auto mappingVersion=xyMapping.load();
@@ -60,21 +61,30 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float radius=std::max(1.f,std::hypot(x,y));p.signedX=x/radius;p.signedY=y/radius;
     p.mutate = values[2]->load() * .01f; p.drive = values[3]->load(); p.mode = static_cast<int>(values[4]->load());
     p.mix = values[5]->load() * .01f; p.output = values[6]->load(); p.protect = values[7]->load(); p.enabled = values[8]->load() >= .5f;
-    constexpr float speeds[]{.25f,.5f,1,2,4};p.speed=speeds[juce::jlimit(0,4,static_cast<int>(values[11]->load()))];
+    p.speed=DnaTiming::legacySpeed(values[11]->load());p.pitch=values[12]->load();p.rhythmic=dnaSync.load();p.regionBeats=DnaTiming::beats[DnaTiming::index(values[11]->load())];
+    p.bpm=120;bool bpmKnown=false;
     bool transportKnown=false,playing=true;
     if(auto* hostClock=getPlayHead())if(const auto position=hostClock->getPosition())
     {
         transportKnown=true;playing=position->getIsPlaying();
+        if(const auto bpm=position->getBpm();bpm&&std::isfinite(*bpm)&&*bpm>=1&&*bpm<=999){p.bpm=*bpm;bpmKnown=true;}
         auto samples=position->getTimeInSamples();if(!samples)if(const auto seconds=position->getTimeInSeconds())samples=std::llround(*seconds*runningRate.load());
+        auto ppq=position->getPpqPosition();if(!ppq&&samples)ppq=double(*samples)/runningRate.load()*p.bpm/60;
+        bool seek=false;
         if(playing&&samples)
         {
-            if(expectedSample>=0&&std::abs(*samples-expectedSample)>2&&(*samples!=lastReportedSample||!lastTransportPlaying)){dsp.resetModulation();dsp.seekPattern(static_cast<double>(*samples)/runningRate,p.speed);}
+            seek=expectedSample<0||(std::abs(*samples-expectedSample)>2&&(*samples!=lastReportedSample||!lastTransportPlaying));
+            if(!p.rhythmic&&expectedSample>=0&&seek){dsp.resetModulation();dsp.seekPattern(static_cast<double>(*samples)/runningRate,p.speed);}
             lastReportedSample=*samples;expectedSample=*samples+buffer.getNumSamples();
         }
+        else if(playing&&ppq)seek=expectedPpq<0||(*ppq!=lastPpq&&std::abs(*ppq-expectedPpq)>.01);
+        if(playing&&ppq){if(p.rhythmic&&seek)dsp.seekRhythm(*ppq,p.regionBeats,p.mode);lastPpq=*ppq;expectedPpq=*ppq+buffer.getNumSamples()*p.bpm/(60*runningRate.load());}
     }
+    hostTempo.store(p.bpm);tempoAvailable.store(bpmKnown);
     p.inputActive=buffer.getNumSamples()>0&&buffer.getMagnitude(0,buffer.getNumSamples())>1.0e-5f;
     p.patternEnabled=!transportKnown||playing;lastTransportPlaying=playing;
     auto profile = profiles.read();
+    p.audioTriggers=true;for(const auto e:midi)if(e.numBytes>=3&&(e.data[0]&0xf0)==0x90&&e.data[2]!=0){p.audioTriggers=false;break;}
     if (!p.enabled) { visualAnalyser.reset(); visualReadout.clear(); }
     auto event = midi.cbegin();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
@@ -82,7 +92,7 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         while (event != midi.cend() && (*event).samplePosition <= i)
         {
             const auto e = *event;
-            if (p.mode == 1 && e.numBytes >= 3 && (e.data[0] & 0xf0) == 0x90 && e.data[2] != 0) dsp.noteOn();
+            if (p.mode == 1 && e.numBytes >= 3 && (e.data[0] & 0xf0) == 0x90 && e.data[2] != 0){if(p.rhythmic){if(p.patternEnabled)dsp.triggerRhythm();}else dsp.noteOn();}
             ++event;
         }
         float frame[2] {};
@@ -99,6 +109,12 @@ void WubrotProcessor::setParameterValue(const juce::String& id, float value)
 {
     if (!std::isfinite(value)) return;
     if (auto* parameter = parameters.getParameter(id)) parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+}
+void WubrotProcessor::setDnaRhythmValue(float value)
+{
+    if(!std::isfinite(value))return;
+    if(!dnaSync.exchange(true)){resetProfileClock.store(true);updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true));}
+    setParameterValue("dnaSpeed",DnaTiming::value(DnaTiming::index(value)));
 }
 void WubrotProcessor::parameterGesture(const juce::String& id, bool start)
 {
@@ -217,16 +233,17 @@ bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
     if (!manifest.isObject()) { const juce::String message="Factory preset content is missing or invalid. Replace WUBROT.vst3 with the complete development bundle.";setStatus(message);if(error)*error=message;return false; }
     clearSample();
     const auto data = manifest["parameters"];
-    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed" })
+    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed", "dnaPitch" })
     {
         float fallback=parameters.getParameter(id)->convertFrom0to1(parameters.getParameter(id)->getDefaultValue());
         const juce::String parameterId(id);
         if(parameterId=="mutate")fallback=67;
+        else if(parameterId=="dnaSpeed")fallback=2;
         else if(parameterId=="drive")fallback=8.5f;
         else if(parameterId=="output")fallback=-6;
         parameterGesture(id,true);setParameterValue(id,data.hasProperty(id)?static_cast<float>(data[id]):fallback);parameterGesture(id,false);
     }
-    xyMapping.store(1); // Factory sounds retain their original mapping.
+    xyMapping.store(1);dnaSync.store(false); // Factory sounds retain their original mapping/timing.
     currentPreset.store(index);
     {const juce::ScopedLock lock(metadataLock);activePresetName=presetNames[index];activeUserFile.clear();}
     const auto relative = manifest["sample"].toString();
@@ -244,11 +261,16 @@ juce::var WubrotProcessor::uiState(bool includeWaveform)
 {
     const juce::ScopedLock lock(metadataLock);
     auto object = std::make_unique<juce::DynamicObject>();
-    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed" })
+    for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed", "dnaPitch" })
         object->setProperty(id, parameters.getRawParameterValue(id)->load());
     object->setProperty("name", sampleName); object->setProperty("status", status);
     object->setProperty("loading", loading.load()&&!regionJob.load()); object->setProperty("preset", currentPreset.load());
     object->setProperty("xyMapping",xyMapping.load());
+    object->setProperty("dnaSync",dnaSync.load());object->setProperty("bpm",hostTempo.load());object->setProperty("tempoKnown",tempoAvailable.load());
+    int rhythmIndex=DnaTiming::index(values[11]->load());
+    if(!dnaSync.load()){auto read=profiles.read();if(const auto* p=read.get();p&&p->valid)rhythmIndex=DnaTiming::nearest(p->duration/DnaTiming::legacySpeed(values[11]->load())*hostTempo.load()/60);}
+    object->setProperty("dnaRhythm",rhythmIndex);
+    juce::Array<juce::var> divisions;for(const auto* label:DnaTiming::labels)divisions.add(label);object->setProperty("dnaDivisions",divisions);
     const auto mapping=XYMapping::map(values[0]->load(),values[1]->load(),runningRate.load(),xyMapping.load());
     object->setProperty("crushBitDepth",mapping.bits);object->setProperty("crushSampleRate",mapping.rate);
     object->setProperty("sampleRate", runningRate.load()); object->setProperty("editorSize", editorSize.load());
@@ -270,6 +292,7 @@ juce::ValueTree WubrotProcessor::captureState(bool includeSourceAudio)
 {
     const juce::ScopedLock lock(metadataLock);
     auto state = parameters.copyState(); state.setProperty("xyMapping",xyMapping.load(),nullptr); state.removeProperty("envelope", nullptr); state.removeProperty("duration", nullptr); state.removeProperty("dnaCharacter", nullptr); state.removeProperty("dnaSpectrum", nullptr); state.setProperty("version", 1, nullptr); state.setProperty("editorSize", editorSize.load(), nullptr);
+    state.setProperty("dnaSync",dnaSync.load(),nullptr);
     state.setProperty("analysisStart",analysedStart,nullptr);state.setProperty("analysisEnd",analysedEnd,nullptr);
     state.setProperty("sampleName", sampleName, nullptr); state.setProperty("preset", currentPreset.load(), nullptr);
     state.removeProperty("sourceWav",nullptr);state.removeProperty("fullEnvelope",nullptr);
@@ -309,14 +332,14 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
-    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8"&&state["xyMapping"].toString()!="9"&&state["xyMapping"].toString()!="10")
+    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8"&&state["xyMapping"].toString()!="9"&&state["xyMapping"].toString()!="10"&&state["xyMapping"].toString()!="11")
     {setStatus("Unsupported XY mapping version. This project needs a newer WUBROT build.");return;}
     if (!state.getChildWithProperty("id", "enabled").isValid())
     {
         juce::ValueTree on("PARAM"); on.setProperty("id", "enabled", nullptr); on.setProperty("value", 1.0f, nullptr);
         state.appendChild(on, nullptr);
     }
-    for(const auto& item:std::array<std::pair<const char*,float>,3>{{{"regionStart",0},{"regionEnd",1},{"dnaSpeed",2}}})
+    for(const auto& item:std::array<std::pair<const char*,float>,4>{{{"regionStart",0},{"regionEnd",1},{"dnaSpeed",2},{"dnaPitch",0}}})
         if(!state.getChildWithProperty("id",item.first).isValid()){juce::ValueTree value("PARAM");value.setProperty("id",item.first,nullptr);value.setProperty("value",item.second,nullptr);state.appendChild(value,nullptr);}
     DnaProfile profile;
     const auto envelope = juce::JSON::parse(state["envelope"].toString());
@@ -367,8 +390,9 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto full=juce::JSON::parse(state["fullEnvelope"].toString());
     if(auto* array=full.getArray();array&&array->size()==static_cast<int>(DnaProfile::bins))for(std::size_t i=0;i<DnaProfile::bins;++i){const float v=static_cast<float>((*array)[static_cast<int>(i)]);fullEnvelope[i]=std::isfinite(v)?juce::jlimit(0.0f,1.0f,v):0;}
     storedWav.fromBase64Encoding(state["sourceWav"].toString());if(storedWav.getSize()>maxSampleBytes)storedWav.reset();
-    xyMapping.store(juce::jlimit(1,10,static_cast<int>(state.getProperty("xyMapping",1))));
+    xyMapping.store(juce::jlimit(1,11,static_cast<int>(state.getProperty("xyMapping",1))));
     parameters.replaceState(state); profiles.publish(profile);
+    dnaSync.store(bool(state.getProperty("dnaSync",xyMapping.load()>=11)));
     presetBaseline=state.getProperty("presetBaseline",soundSignature()).toString();
     analysedStart=static_cast<float>(state.getProperty("analysisStart",values[9]->load()));analysedEnd=static_cast<float>(state.getProperty("analysisEnd",values[10]->load()));
     recalledRegion=profile;recalledStart=analysedStart;recalledEnd=analysedEnd;

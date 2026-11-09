@@ -13,14 +13,14 @@ public:
     void prepare(double sr)noexcept{sampleRate=sr;coefficient=1-std::exp(-1.0f/(.006f*static_cast<float>(sr)));reset();}
     void reset()noexcept{states={};primed=false;modernPrimed=false;warmState={};}
     void process(float* frame,int channels,float vowel,float resonance,float amount,
-                 const DnaSpectrum* profile=nullptr,float mutate=0)noexcept
+                 const DnaSpectrum* profile=nullptr,float mutate=0,float pitch=0)noexcept
     {
         vowel=std::clamp(vowel,0.0f,1.0f);
         std::array<float,3> target {320+650*vowel,900+1400*vowel,2600+1500*vowel};
         const bool dna=profile&&profile->valid&&mutate>0;
         for(std::size_t b=0;b<3;++b)
         {
-            if(dna)target[b]=(1-mutate)*target[b]+mutate*profile->peaks[b]*(.85f+.3f*vowel);
+            if(dna)target[b]=(1-mutate)*target[b]+mutate*profile->peaks[b]*(.85f+.3f*vowel)*std::exp2(pitch/12);
             target[b]=std::clamp(target[b],150.0f,static_cast<float>(sampleRate*.4));
         }
         if(!primed){frequencies=target;primed=true;}
@@ -46,10 +46,11 @@ public:
         }
     }
     void setModern(float vowel, float amount, float mutation, const DnaTemporalFrame &shape, float warmth,
-                   int frames, bool impact=false, bool transform=false,float coreColour=0,float coreVowel=.4f,bool deepen=false) noexcept
+                   int frames, bool impact=false, bool transform=false,float coreColour=0,float coreVowel=.4f,bool deepen=false,bool dnaRefinement=false,float pitch=0) noexcept
     {
         deep=deepen;
-        std::array<float, 31> key{};
+        enhancedDna=dnaRefinement;
+        std::array<float, 33> key{};
         key[0] = vowel;
         key[1] = amount;
         key[2] = mutation;
@@ -68,6 +69,7 @@ public:
         key[cursor++] = transform ? 1.f : 0.f;
         key[cursor++] = coreColour;key[cursor++] = coreVowel;
         key[cursor++] = deepen?1.f:0.f;
+        key[cursor++] = dnaRefinement?1.f:0.f;key[cursor++]=pitch;
         if (modernPrimed && key == modernKey)
         {
             modern = modernGoal;
@@ -103,6 +105,7 @@ public:
         {
             float referenceLog=shape.logPeaks[b];
             if(transform)referenceLog=coreColour>0?5.0751738f+(deepen?.85f:.65f)*(referenceLog-4.0073332f)+std::log1p(.5f*vowel):std::log(110+std::exp(referenceLog)*(.22f+.78f*vowel));
+            if(pitch!=0)referenceLog+=pitch*.057762265f;
             const float hz = std::clamp(
                 contrast > 0 ? std::exp(std::log(base[b]) * (1 - contrast) + referenceLog * contrast)
                              : base[b],
@@ -152,12 +155,14 @@ public:
             }
             float coloured = foundation ? x+modern[14]*(2.f*bands-.5f*body)+modern[13]*(2.3f*bands-.5f*body) : modern[12]>0 ? x*(1-.6f*modern[12])+(1.35f*modern[9]+1.8f*modern[12])*bands : x + 1.35f * modern[9] * bands;
             if(deep&&foundation&&modern[13]>0)coloured=x+modern[14]*(2.f*bands-.5f*body)+modern[13]*(3.8f*bands-.85f*body);
+            if(enhancedDna&&foundation&&modern[13]>0)coloured=x+modern[14]*(2.f*bands-.5f*body)+modern[13]*(6.f*bands-.97f*body);
             warmState[std::size_t(ch)] += modern[11] * (coloured - warmState[std::size_t(ch)]);
             frame[ch] = coloured + modern[10] * (warmState[std::size_t(ch)] - coloured);
         }
     }
 private:
-    std::array<float,15> modern{},modernStep{},modernGoal{};std::array<float,31> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false,deep=false;
+    friend struct DigitalRoutingProbe;
+    std::array<float,15> modern{},modernStep{},modernGoal{};std::array<float,33> modernKey{};std::array<float,2> warmState{};bool modernPrimed=false,deep=false,enhancedDna=false;
     double sampleRate=48000;float coefficient=.01f;bool primed=false;
     std::array<float,3> frequencies {};
     std::array<std::array<std::array<float,2>,3>,2> states {};

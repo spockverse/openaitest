@@ -15,6 +15,9 @@ juce::String signature(const juce::ValueTree &s, const juce::String &dna)
                           std::llround((v - lows[i]) / (highs[i] - lows[i]) * 100000.)));
     }
     if(static_cast<int>(s.getProperty("xyMapping",1))>=2)text+=":xy"+s["xyMapping"].toString();
+    const auto pitch=std::llround(double(s.getChildWithProperty("id","dnaPitch")["value"])*1000);
+    if(pitch!=0)text+=":pitch"+juce::String(static_cast<juce::int64>(pitch));
+    if(bool(s.getProperty("dnaSync",false)))text+=":sync1";
     return text;
 }
 } // namespace
@@ -33,6 +36,9 @@ juce::String WubrotProcessor::soundSignature()
             juce::String(static_cast<juce::int64>(std::llround(
                 (values[static_cast<std::size_t>(i)]->load() - lows[i]) / (highs[i] - lows[i]) * 100000.)));
     if(xyMapping.load()>=2)text+=":xy"+juce::String(xyMapping.load());
+    const auto pitch=std::llround(values[12]->load()*1000);
+    if(pitch!=0)text+=":pitch"+juce::String(static_cast<juce::int64>(pitch));
+    if(dnaSync.load())text+=":sync1";
     return text;
 }
 void WubrotProcessor::markPresetClean()

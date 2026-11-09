@@ -104,7 +104,7 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
     if(s.hasProperty("xyMapping"))
     {
         double version=0;
-        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7&&version!=8&&version!=9&&version!=10))
+        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7&&version!=8&&version!=9&&version!=10&&version!=11))
             return juce::Result::fail("Unsupported XY mapping version. Update WUBROT to load this preset.");
     }
     struct Bound
@@ -117,11 +117,13 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
         {"x", -1, 1, false},          {"y", -1, 1, false},        {"mutate", 0, 100, false},
         {"drive", 0, 36, false},      {"mode", 0, 1, true},       {"mix", 0, 100, false},
         {"output", -24, 6, false},    {"protect", 0, 1, true},    {"enabled", 0, 1, true},
-        {"regionStart", 0, 1, false}, {"regionEnd", 0, 1, false}, {"dnaSpeed", 0, 4, true}};
-    if (s.getNumChildren() != 12)
-        return juce::Result::fail("The preset must contain all 12 WUBROT parameters.");
+        {"regionStart", 0, 1, false}, {"regionEnd", 0, 1, false}, {"dnaSpeed", 0, 4, false}, {"dnaPitch",-24,24,false}};
+    if (s.getNumChildren() != 12&&s.getNumChildren()!=13)
+        return juce::Result::fail("The preset has missing or unknown WUBROT parameters.");
+    if(s.hasProperty("dnaSync")&&s["dnaSync"].toString()!="0"&&s["dnaSync"].toString()!="1")return juce::Result::fail("Invalid DNA timing mode.");
     for (const auto &b : bounds)
     {
+        if(juce::String(b.id)=="dnaPitch"&&s.getNumChildren()==12)continue;
         int count = 0;
         for (auto c : s)
             if (c.hasType("PARAM") && c["id"].toString() == b.id)
@@ -176,7 +178,7 @@ juce::Result PresetLibrary::read(const juce::File &f, juce::ValueTree &state, ju
     auto xml = juce::parseXML(text);
     if (!xml || !xml->hasTagName("WubrotPreset") || xml->getStringAttribute("plugin") != "WUBROT")
         return juce::Result::fail("This is not a compatible WUBROT preset.");
-    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2" && xml->getStringAttribute("formatVersion") != "3" && xml->getStringAttribute("formatVersion") != "4" && xml->getStringAttribute("formatVersion") != "5" && xml->getStringAttribute("formatVersion") != "6" && xml->getStringAttribute("formatVersion") != "7" && xml->getStringAttribute("formatVersion") != "8" && xml->getStringAttribute("formatVersion") != "9" && xml->getStringAttribute("formatVersion") != "10")
+    if (xml->getStringAttribute("formatVersion") != "1" && xml->getStringAttribute("formatVersion") != "2" && xml->getStringAttribute("formatVersion") != "3" && xml->getStringAttribute("formatVersion") != "4" && xml->getStringAttribute("formatVersion") != "5" && xml->getStringAttribute("formatVersion") != "6" && xml->getStringAttribute("formatVersion") != "7" && xml->getStringAttribute("formatVersion") != "8" && xml->getStringAttribute("formatVersion") != "9" && xml->getStringAttribute("formatVersion") != "10" && xml->getStringAttribute("formatVersion") != "11")
         return juce::Result::fail("Unsupported preset version. Update WUBROT to open this file.");
     name = xml->getStringAttribute("name");
     auto r = validName(name);
@@ -185,8 +187,9 @@ juce::Result PresetLibrary::read(const juce::File &f, juce::ValueTree &state, ju
     if (xml->getNumChildElements() != 1 || !xml->getFirstChildElement()->hasTagName("WubrotState"))
         return juce::Result::fail("The preset state is missing or malformed.");
     auto candidate = juce::ValueTree::fromXml(*xml->getFirstChildElement());
-    if(xml->getIntAttribute("formatVersion")!=static_cast<int>(candidate.getProperty("xyMapping",1)))
+    if(xml->getIntAttribute("formatVersion")<11&&xml->getIntAttribute("formatVersion")!=static_cast<int>(candidate.getProperty("xyMapping",1)))
         return juce::Result::fail("Preset container and XY mapping version do not agree.");
+    if(xml->getIntAttribute("formatVersion")==11&&!candidate.getChildWithProperty("id","dnaPitch").isValid())return juce::Result::fail("Missing DNA PITCH parameter.");
     r = validate(candidate);
     if (r.failed())
         return r;
@@ -222,10 +225,12 @@ juce::Result PresetLibrary::write(const juce::File &f, const juce::ValueTree &st
         return juce::Result::fail(
             "A preset with that name already exists. Choose Overwrite or a different name.");
     juce::XmlElement xml("WubrotPreset");
-    xml.setAttribute("formatVersion", static_cast<int>(state.getProperty("xyMapping",1)));
+    xml.setAttribute("formatVersion", 11);
     xml.setAttribute("plugin", "WUBROT");
     xml.setAttribute("name", name);
-    xml.addChildElement(state.createXml().release());
+    auto serialized=state.createCopy();
+    if(!serialized.getChildWithProperty("id","dnaPitch").isValid()){juce::ValueTree pitch("PARAM");pitch.setProperty("id","dnaPitch",nullptr);pitch.setProperty("value",0.f,nullptr);serialized.appendChild(pitch,nullptr);}
+    xml.addChildElement(serialized.createXml().release());
     const auto text = xml.toString(juce::XmlElement::TextFormat().singleLine());
     if (text.getNumBytesAsUTF8() > limit)
         return juce::Result::fail("Preset analysis exceeds the 2 MB format limit.");

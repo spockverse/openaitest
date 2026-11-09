@@ -29,6 +29,11 @@ struct DnaProfile
     {
         return lookup(envelope, seconds);
     }
+    float atPosition(float position)const noexcept {
+        if(!valid)return 0;
+        const float p=std::clamp(position,0.f,1.f)*float(bins-1);
+        const auto i=std::min(std::size_t(p),bins-1),j=std::min(i+1,bins-1);return envelope[i]+(p-float(i))*(envelope[j]-envelope[i]);
+    }
     float characterAt(double seconds) const noexcept { return lookup(character, seconds); }
     float lookup(const std::array<float, bins>& values, double seconds) const noexcept
     {
