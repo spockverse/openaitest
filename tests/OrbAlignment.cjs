@@ -44,7 +44,7 @@ async function checkCoordinates(p){
  await p.evaluate(()=>{window.listeners={};window.messages=[];window.__JUCE__={backend:{emitEvent:(id,event)=>messages.push(event),addEventListener:(id,f)=>listeners[id]=f}}});await p.setContent(fs.readFileSync(path.join(__dirname,'../prototype/WUBROT.html'),'utf8'));await p.evaluate(()=>listeners.wubrotState({enabled:1,x:0,y:0,mutate:67,drive:8.5,mode:0,regionStart:0,regionEnd:1,dnaSpeed:2,sampleRate:48000,status:'Ready.'}));
  const field=await p.locator('#field').boundingBox();
  const panel=await p.locator('.field').boundingBox(),rail=await p.locator('.xy-coordinates').boundingBox();
- assert(rail.x>=field.x+field.width*(590/640)+2&&rail.x+rail.width<=panel.x+panel.width&&rail.y>=panel.y&&rail.y+rail.height<=panel.y+panel.height,'Coordinate faders overlap the jelly or panel border');
+ assert(rail.x>=field.x+field.width*(624/640)+2&&rail.x+rail.width<=panel.x+panel.width&&rail.y>=panel.y&&rail.y+rail.height<=panel.y+panel.height,'Coordinate faders overlap the jelly or panel border');
  for(const axis of ['X','Y'])assert(await p.locator('#xy'+axis).evaluate(e=>e.scrollWidth<=e.clientWidth),'Percentage entry clips');
  if(dpr===1.5)await checkCoordinates(p);
 

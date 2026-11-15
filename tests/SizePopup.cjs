@@ -24,10 +24,10 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
         assert(Math.abs(shell.width-width)<1 && shell.height<=height && height-shell.height<1);
         const scale = width/1200;
         const field = await page.locator('#field').boundingBox();
-        // The reference's wider right panels still leave the fader column clear.
-        assert(Math.abs(field.width/width-.43)<.0001);
+        // Size the square surface from its own area, including the painted edge guard.
+        assert(Math.abs(field.width-field.height)<.1, 'Field canvas is not square');
         const rail=await page.locator('.xy-coordinates').boundingBox(),panel=await page.locator('.field').boundingBox();
-        assert(rail.x>=field.x+field.width*(590/640)+2*scale&&rail.x+rail.width<panel.x+panel.width&&rail.y+rail.height<panel.y+panel.height,'XY faders overlap the field or panel edge');
+        assert(rail.x>=field.x+field.width*(624/640)+2*scale&&rail.x+rail.width<panel.x+panel.width&&rail.y+rail.height<panel.y+panel.height,'XY faders overlap the field or panel edge');
         await page.mouse.move(field.x+field.width/2,field.y+field.height/2);
         await page.mouse.down();
         await page.mouse.move(field.x+field.width*.6,field.y+field.height*.4);

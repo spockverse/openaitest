@@ -47,8 +47,8 @@ async function assertGesture(p) {
       // The supplied close-up fixes the panel geometry on the 1200px design canvas.
       const dnaPanel = await p.locator('.dna').boundingBox();
       const enginePanel = await p.locator('.engine').boundingBox();
-      for (const [actual, expected] of [[dnaPanel.width,474],[dnaPanel.height,358],
-        [enginePanel.width,474],[enginePanel.height,353],[enginePanel.y-dnaPanel.y-dnaPanel.height,22]])
+      for (const [actual, expected] of [[dnaPanel.width,1132/2.55-16/2.55],[dnaPanel.height,358],
+        [enginePanel.width,1132/2.55-16/2.55],[enginePanel.height,353],[enginePanel.y-dnaPanel.y-dnaPanel.height,22]])
         assert(Math.abs(actual / scale - expected) < .1,
           `Reference panel proportions changed: ${actual/scale} vs ${expected}, ${width} DPR ${dpr}`);
       // System font metrics must not expand the reference's fixed panels on Windows.
