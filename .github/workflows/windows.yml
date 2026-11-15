@@ -65,7 +65,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/Release/WubrotCallbackBenchmark.exe build/Performance dna closed 11 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($task_name in @('v048', 'dna')) {
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance dna-ui ui 11 timing-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($task_name in @('v048', 'dna', 'dna-ui')) {
             $task_report = Get-Content "build/Performance/$task_name-callback.json" -Raw | ConvertFrom-Json
             Write-Output "$task_name peak=$($task_report.observedPeak) latency=$($task_report.latencySamples)"
             $task_report.cases | Select-Object sampleRate, buffer, meanUs, p99Us, maxUs | Format-Table

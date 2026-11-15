@@ -159,6 +159,7 @@ class GelPhysics {
   this.reset();
  }
  reset(){
+  this.revision=(this.revision||0)+1;
   this.h.fill(0);this.v.fill(0);this.nextV.fill(0);
   for(let i=0;i<this.pixels.length;i+=4){this.pixels[i]=128;this.pixels[i+1]=0;this.pixels[i+2]=128;this.pixels[i+3]=0;}
   this.x=this.y=this.vx=this.vy=0;this.accumulator=0;this.active=false;this.energy=0;
@@ -193,7 +194,7 @@ class GelPhysics {
   // Catch up only a bounded amount after a stall; never replay a hidden tab's time.
   this.accumulator+=Math.min(.05,Math.max(0,seconds));
   while(this.accumulator+1e-9>=dt){
-   this.accumulator-=dt;
+   this.accumulator-=dt;this.revision++;
    for(let y=1;y<n-1;y++)for(let x=1;x<n-1;x++){
     const i=y*n+x;if(!this.loss[i])continue;
     const lap=this.h[i-1]+this.h[i+1]+this.h[i-n]+this.h[i+n]-4*this.h[i];
@@ -212,6 +213,7 @@ class GelPhysics {
   return this.active;
  }
  normals(){
+  if(!this.active)return this.pixels;
   const n=this.size;
   for(let y=1;y<n-1;y++)for(let x=1;x<n-1;x++){
    const i=y*n+x,p=i*4;
@@ -259,7 +261,23 @@ class GelRenderer {
     attribute vec2 aPosition;varying vec2 uv;
     void main(){uv=vec2(aPosition.x*.5+.5,.5-aPosition.y*.5);gl_Position=vec4(aPosition,0.,1.);}
    `);
-   const fragment=shader(gl.FRAGMENT_SHADER,`
+   // Cache only time-invariant optics, at the original resolution and float precision.
+   // Unsupported float render targets retain the original shader verbatim.
+   let staticOptics=null;
+   if(gl.getExtension('OES_texture_float')&&gl.getExtension('WEBGL_color_buffer_float')){
+    const texture=gl.createTexture(),framebuffer=gl.createFramebuffer();
+    if(texture&&framebuffer){
+    gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,texture);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,640,640,0,gl.RGBA,gl.FLOAT,null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,framebuffer);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE)staticOptics={texture,framebuffer};
+    else{gl.deleteTexture(texture);gl.deleteFramebuffer(framebuffer);}
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    }else{if(texture)gl.deleteTexture(texture);if(framebuffer)gl.deleteFramebuffer(framebuffer);}
+   }
+   let fragmentSource=`
     precision highp float;varying vec2 uv;
     uniform sampler2D artwork;uniform sampler2D normals;uniform vec2 body;uniform float idleTime;uniform float idleAmount;uniform vec2 anchor;uniform vec2 materialLag;uniform float reactiveGain;uniform float reactiveLight;
     void main(){
@@ -299,7 +317,22 @@ class GelRenderer {
      colour+=vec3(.30,.10,.43)*rim*(.5+.5*sin(atan(p.y,p.x)*3.+.8));
      gl_FragColor=vec4(colour,alpha);
     }
-   `);
+   `;
+   const staticSource=`precision highp float;varying vec2 uv;
+    void main(){vec2 p=uv-.5;float radius=length(p);
+     float alpha=1.-smoothstep(.465,.4671875,radius);
+     float edge=max(0.,1.-pow(radius/.4671875,4.));
+     float rim=smoothstep(.455,.463,radius)*(1.-smoothstep(.464,.4671875,radius));
+     float rimLight=.5+.5*sin(atan(p.y,p.x)*3.+.8);
+     gl_FragColor=vec4(edge,rim,rimLight,1.);
+    }`;
+   if(staticOptics){
+    fragmentSource=fragmentSource.replace('uniform sampler2D artwork;','uniform highp sampler2D staticOptics;uniform sampler2D artwork;')
+     .replace('float alpha=1.-smoothstep(.465,.4671875,radius);','vec4 optics=texture2D(staticOptics,vec2(uv.x,1.-uv.y));float alpha=1.-smoothstep(.465,.4671875,radius);')
+     .replace('float edge=max(0.,1.-pow(radius/.4671875,4.));','float edge=optics.r;')
+     .replace('colour+=vec3(.30,.10,.43)*rim*(.5+.5*sin(atan(p.y,p.x)*3.+.8));','colour+=vec3(.30,.10,.43)*optics.g*optics.b;');
+   }
+   const fragment=shader(gl.FRAGMENT_SHADER,fragmentSource);
    const program=gl.createProgram();gl.attachShader(program,vertex);gl.attachShader(program,fragment);gl.linkProgram(program);
    gl.deleteShader(vertex);gl.deleteShader(fragment);
    if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
@@ -312,6 +345,17 @@ class GelRenderer {
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;
    };
+   if(staticOptics){
+    const cacheVertex=shader(gl.VERTEX_SHADER,'attribute vec2 aPosition;varying vec2 uv;void main(){uv=vec2(aPosition.x*.5+.5,.5-aPosition.y*.5);gl_Position=vec4(aPosition,0.,1.);}');
+    const cacheFragment=shader(gl.FRAGMENT_SHADER,staticSource),cacheProgram=gl.createProgram();
+    gl.attachShader(cacheProgram,cacheVertex);gl.attachShader(cacheProgram,cacheFragment);gl.linkProgram(cacheProgram);
+    if(!gl.getProgramParameter(cacheProgram,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(cacheProgram));
+    gl.useProgram(cacheProgram);const cachePosition=gl.getAttribLocation(cacheProgram,'aPosition');gl.enableVertexAttribArray(cachePosition);gl.vertexAttribPointer(cachePosition,2,gl.FLOAT,false,0,0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,staticOptics.framebuffer);gl.viewport(0,0,640,640);gl.drawArrays(gl.TRIANGLES,0,6);gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.deleteFramebuffer(staticOptics.framebuffer);gl.deleteProgram(cacheProgram);gl.deleteShader(cacheVertex);gl.deleteShader(cacheFragment);
+    gl.useProgram(program);gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
+    gl.uniform1i(gl.getUniformLocation(program,'staticOptics'),2);this.staticOptics=staticOptics.texture;
+   }
    this.artwork=texture(gl.TEXTURE0);gl.uniform1i(gl.getUniformLocation(program,'artwork'),0);
    this.normals=texture(gl.TEXTURE1);gl.uniform1i(gl.getUniformLocation(program,'normals'),1);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,64,64,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(64*64*4).fill(128));
@@ -329,7 +373,8 @@ class GelRenderer {
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.artwork);
   if(!this.ready){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);this.ready=true;}
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.normals);
-  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,64,64,gl.RGBA,gl.UNSIGNED_BYTE,gel.normals());
+  // Upload only changed simulation data; idle motion still uses the original shader clock.
+  if(this.normalField!==gel||this.normalRevision!==gel.revision){gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,64,64,gl.RGBA,gl.UNSIGNED_BYTE,gel.normals());this.normalField=gel;this.normalRevision=gel.revision;}
   gl.uniform1f(this.reactiveGain,reactiveGain);gl.uniform1f(this.reactiveLight,reactiveLight);gl.uniform2f(this.anchor,px*.421875,py*.421875);gl.uniform2f(this.materialLag,(px-membrane.x)*.421875,(py-membrane.y)*.421875);gl.uniform1f(this.idleTime,idleTime);gl.uniform1f(this.idleAmount,idleAmount);gl.uniform2f(this.body,gel.x,gel.y);gl.drawArrays(gl.TRIANGLES,0,6);return true;
  }
 }

@@ -22,6 +22,7 @@ function gesture(duration) {
 const idle = new GelPhysics();
 for (let i = 0; i < 600; i++) idle.advance(1 / 60);
 assert.equal(idle.active, false, 'the jelly must not generate its own motion');
+const revision=idle.revision;idle.advance(1/60);assert.equal(idle.revision,revision,'Idle physics invalidated its cached texture');idle.reset();assert.ok(idle.revision>revision,'Reset must invalidate the cached normal texture');
 assert.ok(idle.h.every(value => value === 0), 'idle surface stays flat');
 idle.impulse(.2, .4, .2, .4, .01);
 assert.equal(idle.active, false, 'a stationary pointer must not keep the jelly awake');
