@@ -49,7 +49,15 @@ async function assertGesture(p) {
       const enginePanel = await p.locator('.engine').boundingBox();
       for (const [actual, expected] of [[dnaPanel.width,474],[dnaPanel.height,358],
         [enginePanel.width,474],[enginePanel.height,353],[enginePanel.y-dnaPanel.y-dnaPanel.height,22]])
-        assert(Math.abs(actual / scale - expected) < .1, 'Reference panel proportions changed');
+        assert(Math.abs(actual / scale - expected) < .1,
+          `Reference panel proportions changed: ${actual/scale} vs ${expected}, ${width} DPR ${dpr}`);
+      // System font metrics must not expand the reference's fixed panels on Windows.
+      for (const fontFamily of ['Arial', 'monospace']) {
+        await p.locator('.right').evaluate((e,font)=>e.style.fontFamily=font,fontFamily);
+        assert(Math.abs((await p.locator('.dna').boundingBox()).height/scale-358)<.1,'DNA height depends on system font metrics');
+        assert(Math.abs((await p.locator('.engine').boundingBox()).height/scale-353)<.1,'Engine height depends on system font metrics');
+      }
+      await p.locator('.right').evaluate(e=>e.style.removeProperty('font-family'));
       assert(await p.locator('.dna-empty').isHidden(), 'Empty-loader art obscures the loaded waveform');
       assert.equal(await p.locator('#dnaLoop,#dnaRetrigger,.dna-mode,#speedDown,#speedUp,select#dnaSpeed').count(), 0);
       assert.equal(await p.locator('.dna-speed-knob').count(), 2);

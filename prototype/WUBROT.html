@@ -382,6 +382,7 @@ class GelRenderer {
 .dna-title-text{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .dna .tag{font-size:16px;padding:7px 10px;color:#a8a4b1;border-color:#625f6c;background:linear-gradient(#24242c,#1c1c25);white-space:nowrap}
 .dna .drop{border-color:#9c5cb8;background:linear-gradient(115deg,#180f22,#130d1d)}
+.dna .filename{line-height:16px}
 .dna-empty{position:absolute;inset:-2px -16px -2px;pointer-events:none}
 .dna-helix{display:block;width:100%;height:100%;opacity:.92}
 .dna-empty>span{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#b18ac0;font-size:17px;font-weight:bold;letter-spacing:.5px;text-shadow:0 1px 5px #100a1b,0 0 4px #100a1b;background:radial-gradient(ellipse at center,#170d1fe6,transparent 61%);padding:5px 0}
@@ -393,9 +394,11 @@ class GelRenderer {
 .pitch-readout output{color:#d5a3e7}
 .speed-select #dnaSpeed{width:85px;background:linear-gradient(#2b2038,#211729);border-color:#8e5aa4;color:#d5a7e5}
 .engine{background:linear-gradient(110deg,#24242e,#191923 80%);border-color:#9951b4}
-.engine h2{color:#a09ca8;border-color:#68546f}
+.engine h2{color:#a09ca8;border-color:#68546f;line-height:25px}
 .engine h2:after{background:#bf6dde;box-shadow:0 0 4px #c87deccc,0 0 10px #a53bc64d}
 .knob-control{border-color:#45424f}
+.knob-control label{line-height:24px}
+.knob-control output{line-height:31px}
 .dial{width:164px;height:164px;margin-top:22px;margin-bottom:12px;background:conic-gradient(from 225deg,#8230ad 0deg,#d48ae5 var(--turn),#321744 var(--turn) 270deg,transparent 270deg)}
 .dial:before{background:radial-gradient(closest-side,transparent 0 65%,#bc60dd33 68%,#df98f6 71%,#e7b0fb 73%,#cf7deb 75%,#a34dc04d 79%,transparent 87%),repeating-conic-gradient(#ffffff03 0deg 1deg,transparent 1deg 3deg),conic-gradient(#16161b,#45424c,#121116,#38343f,#101014,#45424c,#16161b);box-shadow:inset 0 0 0 3px #17131e,inset 0 0 0 5px #3f344b,0 6px 12px #000}
 .dial:after{top:34px;height:13px;width:3px;transform-origin:50% 48px;background:#e0a0f4;box-shadow:0 0 4px #c770e8,0 0 8px #b54dda66}
