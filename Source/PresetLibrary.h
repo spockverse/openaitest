@@ -10,6 +10,7 @@ class PresetLibrary
     juce::File fileFor(const juce::String &name) const;
     juce::File resolve(const juce::String &filename) const;
     juce::Array<juce::var> list(juce::String &error) const;
+    static juce::Result validateParameters(const juce::ValueTree &);
     static juce::Result validate(const juce::ValueTree &);
     static juce::Result read(const juce::File &, juce::ValueTree &, juce::String &name);
     static juce::Result write(const juce::File &, const juce::ValueTree &, const juce::String &,

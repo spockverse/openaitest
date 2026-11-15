@@ -339,6 +339,7 @@ class GelRenderer {
 .speed-label{font-size:22px;letter-spacing:1px;margin-bottom:7px;color:#dfb8ef;text-shadow:0 0 7px #b154cf44}
 .speed-select{min-width:0}.speed-select #dnaSpeed{width:80px;height:31px;font-size:18px;padding:4px 7px}
 .pitch-readout{min-width:0}.pitch-readout output{display:block;font-size:20px;color:#e2b6f6;white-space:nowrap;min-width:74px}
+.pitch-readout output.precise{font-size:17px}
 .speed-popup{width:116px;max-height:174px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#985bb5 #1b1226}.speed-popup button{font-size:18px;padding:6px 8px;min-height:29px}
 .sample-footer{gap:8px;min-height:30px}.sample-footer .region-nudge button{width:20px;height:26px}.dna #regionLoop{font-size:11px;gap:4px}.sample-footer .sample-status{font-size:10px;min-width:0}
 .shell.power-off .pitch-readout output{color:#a3a3aa}.shell.power-off .dna-speed-knob:hover{box-shadow:0 3px 7px #000b}.shell.power-off .dna-speed-knob:focus-visible{outline-color:#aaaab0}
@@ -587,7 +588,7 @@ speedKnob.ondblclick=e=>{e.preventDefault();e.stopPropagation();chooseSpeed(2);}
 speedKnob.onkeydown=e=>{let next=dnaSpeedIndex;if(['ArrowUp','ArrowRight','PageUp'].includes(e.key))next++;else if(['ArrowDown','ArrowLeft','PageDown'].includes(e.key))next--;else if(e.key==='Home')next=0;else if(e.key==='End')next=dnaSpeeds.length-1;else return;e.preventDefault();e.stopPropagation();chooseSpeed(next);};
 let dnaPitch=0,pitchDrag=null;
 const pitchKnob=$('dnaPitchKnob');
-function setDnaPitch(value,notify=false){if(!Number.isFinite(value))return;value=Math.round(clamp(value,-24,24)*100)/100;const changed=value!==dnaPitch;dnaPitch=value;const label=(value>0?'+':'')+(Number.isInteger(value)?value:value.toFixed(1))+' st';pitchKnob.style.setProperty('--turn',((value+24)/48*270)+'deg');pitchKnob.setAttribute('aria-valuenow',String(value));pitchKnob.setAttribute('aria-valuetext',label);$('dnaPitchValue').textContent=label;if(changed&&notify)nativeParameter('dnaPitch',value);}
+function setDnaPitch(value,notify=false){if(!Number.isFinite(value))return;value=Math.round(clamp(value,-24,24)*100)/100;const changed=value!==dnaPitch;dnaPitch=value;const label=(value>0?'+':'')+String(value)+' st';pitchKnob.style.setProperty('--turn',((value+24)/48*270)+'deg');pitchKnob.setAttribute('aria-valuenow',String(value));pitchKnob.setAttribute('aria-valuetext',label);$('dnaPitchValue').textContent=label;$('dnaPitchValue').classList.toggle('precise',label.length>7);if(changed&&notify)nativeParameter('dnaPitch',value);}
 function choosePitch(value){beginNativeTouch('dnaPitch');setDnaPitch(value,true);endNativeTouch('dnaPitch');}
 pitchKnob.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();pitchKnob.focus({preventScroll:true});pitchKnob.setPointerCapture(e.pointerId);pitchDrag={y:e.clientY,value:dnaPitch};beginNativeTouch('dnaPitch');};
 pitchKnob.onpointermove=e=>{if(!pitchDrag)return;e.preventDefault();e.stopPropagation();const scale=shell.getBoundingClientRect().width/shell.offsetWidth;pitchDrag.value=clamp(pitchDrag.value+(pitchDrag.y-e.clientY)/(4*scale)*(e.shiftKey?.1:1),-24,24);pitchDrag.y=e.clientY;setDnaPitch(pitchDrag.value,true);};

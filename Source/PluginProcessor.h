@@ -12,7 +12,7 @@ public:
     ~WubrotProcessor() override;
     void prepareToPlay(double, int) override;
     void releaseResources() override {}
-    void reset() override { dsp.reset(); visualAnalyser.reset(); visualReadout.clear(); expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
+    void reset() override { dsp.reset(); visualAnalyser.reset(); visualReadout.clear(); sampleClockValid=ppqClockValid=false;expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
     bool isBusesLayoutSupported(const BusesLayout&) const override;
     using AudioProcessor::processBlock;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -109,6 +109,7 @@ private:
     bool lastTransportPlaying=false;
     std::atomic<double> hostTempo {120};std::atomic<bool> tempoAvailable {false};
     double expectedPpq=-1,lastPpq=-1;
+    bool sampleClockValid=false,ppqClockValid=false;
     juce::int64 lastReportedSample=-1, expectedSample = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WubrotProcessor)
 };

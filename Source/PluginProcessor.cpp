@@ -37,7 +37,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout WubrotProcessor::makeParamet
     p.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"dnaPitch",1},"DNA Pitch",juce::NormalisableRange<float>(-24,24,.01f),0,juce::AudioParameterFloatAttributes().withLabel("st")));
     return p;
 }
-void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); visualAnalyser.prepare(rate); visualReadout.clear(); lastVisualBlockMs=juce::Time::getMillisecondCounterHiRes();lastVisualBlockDurationMs=0; expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
+void WubrotProcessor::prepareToPlay(double rate, int) { runningRate = rate; dsp.prepare(rate); visualAnalyser.prepare(rate); visualReadout.clear(); lastVisualBlockMs=juce::Time::getMillisecondCounterHiRes();lastVisualBlockDurationMs=0; sampleClockValid=ppqClockValid=false;expectedSample = lastReportedSample = -1;expectedPpq=lastPpq=-1;lastTransportPlaying=false;patternPosition.store(0); }
 bool WubrotProcessor::isBusesLayoutSupported(const BusesLayout& b) const
 {
     const auto out = b.getMainOutputChannelSet();
@@ -52,7 +52,7 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if(lastVisualBlockMs>=0&&visualNow-lastVisualBlockMs>std::max(120.0,lastVisualBlockDurationMs*3))
     { visualAnalyser.reset(); visualReadout.clear(); }
     lastVisualBlockMs=visualNow;lastVisualBlockDurationMs=buffer.getNumSamples()*1000.0/runningRate.load();
-    if(resetProfileClock.exchange(false)){dsp.resetModulation();if(dnaSync.load()){expectedSample=-1;expectedPpq=-1;}}
+    if(resetProfileClock.exchange(false)){dsp.resetModulation();if(dnaSync.load()){sampleClockValid=ppqClockValid=false;}}
     float x = values[0]->load(), y = values[1]->load();
     CrushDSP::Parameters p;
     const auto mappingVersion=xyMapping.load();
@@ -68,17 +68,20 @@ void WubrotProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     {
         transportKnown=true;playing=position->getIsPlaying();
         if(const auto bpm=position->getBpm();bpm&&std::isfinite(*bpm)&&*bpm>=1&&*bpm<=999){p.bpm=*bpm;bpmKnown=true;}
-        auto samples=position->getTimeInSamples();if(!samples)if(const auto seconds=position->getTimeInSeconds())samples=std::llround(*seconds*runningRate.load());
-        auto ppq=position->getPpqPosition();if(!ppq&&samples)ppq=double(*samples)/runningRate.load()*p.bpm/60;
+        auto samples=position->getTimeInSamples();if(!samples)if(const auto seconds=position->getTimeInSeconds();seconds&&std::isfinite(*seconds)&&std::abs(*seconds*runningRate.load())<9.e18)samples=std::llround(*seconds*runningRate.load());
+        auto ppq=position->getPpqPosition();if(ppq&&!std::isfinite(*ppq))ppq.reset();if(!ppq&&samples)ppq=double(*samples)/runningRate.load()*p.bpm/60;
         bool seek=false;
         if(playing&&samples)
         {
-            seek=expectedSample<0||(std::abs(*samples-expectedSample)>2&&(*samples!=lastReportedSample||!lastTransportPlaying));
-            if(!p.rhythmic&&expectedSample>=0&&seek){dsp.resetModulation();dsp.seekPattern(static_cast<double>(*samples)/runningRate,p.speed);}
-            lastReportedSample=*samples;expectedSample=*samples+buffer.getNumSamples();
+            seek=!sampleClockValid||(std::abs(double(*samples)-double(expectedSample))>2&&(*samples!=lastReportedSample||!lastTransportPlaying));
+            if(!p.rhythmic&&sampleClockValid&&seek){dsp.resetModulation();dsp.seekPattern(static_cast<double>(*samples)/runningRate,p.speed);}
+            lastReportedSample=*samples;expectedSample=*samples<=std::numeric_limits<juce::int64>::max()-buffer.getNumSamples()?*samples+buffer.getNumSamples():*samples;sampleClockValid=true;
         }
-        else if(playing&&ppq)seek=expectedPpq<0||(*ppq!=lastPpq&&std::abs(*ppq-expectedPpq)>.01);
-        if(playing&&ppq){if(p.rhythmic&&seek)dsp.seekRhythm(*ppq,p.regionBeats,p.mode);lastPpq=*ppq;expectedPpq=*ppq+buffer.getNumSamples()*p.bpm/(60*runningRate.load());}
+        else if(playing&&ppq)seek=!ppqClockValid||((*ppq!=lastPpq||!lastTransportPlaying)&&std::abs(*ppq-expectedPpq)>2*p.bpm/(60*runningRate.load()));
+        if(playing&&ppq){if(p.rhythmic&&seek)dsp.seekRhythm(*ppq,p.regionBeats,p.mode);lastPpq=*ppq;
+            // Track native elapsed time between anchors, so sub-tolerance PPQ
+            // differences cannot accumulate into a permanent phase offset.
+            expectedPpq=(samples||seek||!ppqClockValid?*ppq:expectedPpq)+buffer.getNumSamples()*p.bpm/(60*runningRate.load());ppqClockValid=true;}
     }
     hostTempo.store(p.bpm);tempoAvailable.store(bpmKnown);
     p.inputActive=buffer.getNumSamples()>0&&buffer.getMagnitude(0,buffer.getNumSamples())>1.0e-5f;
@@ -231,6 +234,13 @@ bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
     const auto folder = factoryRoot().getChildFile(presetFolders[index]);
     const auto manifest = juce::JSON::parse(folder.getChildFile("preset.json"));
     if (!manifest.isObject()) { const juce::String message="Factory preset content is missing or invalid. Replace WUBROT.vst3 with the complete development bundle.";setStatus(message);if(error)*error=message;return false; }
+    const auto relative = manifest["sample"].toString();
+    const auto file = folder.getChildFile(relative);
+    if (relative.isEmpty() || !file.isAChildOf(folder) || !file.existsAsFile())
+    {
+        const juce::String message="Factory preset unavailable: missing DNA sample "+juce::String(presetFolders[index])+"/"+relative+". Current sound preserved.";
+        setStatus(message);if(error)*error=message;return false;
+    }
     clearSample();
     const auto data = manifest["parameters"];
     for (const auto* id : { "x", "y", "mutate", "drive", "mode", "mix", "output", "protect", "enabled", "regionStart", "regionEnd", "dnaSpeed", "dnaPitch" })
@@ -246,10 +256,6 @@ bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
     xyMapping.store(1);dnaSync.store(false); // Factory sounds retain their original mapping/timing.
     currentPreset.store(index);
     {const juce::ScopedLock lock(metadataLock);activePresetName=presetNames[index];activeUserFile.clear();}
-    const auto relative = manifest["sample"].toString();
-    const auto file = folder.getChildFile(relative);
-    if (relative.isEmpty() || !file.isAChildOf(folder) || !file.existsAsFile())
-    { setStatus("Factory settings loaded; its optional factory WAV has not been supplied. Load your own sample.");markPresetClean(); return false; }
     loadSampleFile(file,true); return true;
 }
 void WubrotProcessor::timerCallback()
@@ -341,6 +347,10 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     }
     for(const auto& item:std::array<std::pair<const char*,float>,4>{{{"regionStart",0},{"regionEnd",1},{"dnaSpeed",2},{"dnaPitch",0}}})
         if(!state.getChildWithProperty("id",item.first).isValid()){juce::ValueTree value("PARAM");value.setProperty("id",item.first,nullptr);value.setProperty("value",item.second,nullptr);state.appendChild(value,nullptr);}
+    // Validate the complete candidate before changing parameters, DNA ownership,
+    // jobs or preset metadata. JUCE range conversion does not reject NaN.
+    const auto validation=PresetLibrary::validateParameters(state);
+    if(validation.failed()){setStatus("Project state rejected: "+validation.getErrorMessage()+" Current sound preserved.");return;}
     DnaProfile profile;
     const auto envelope = juce::JSON::parse(state["envelope"].toString());
     const double duration = state["duration"];

@@ -96,11 +96,10 @@ juce::Array<juce::var> PresetLibrary::list(juce::String &error) const
     }
     return a;
 }
-juce::Result PresetLibrary::validate(const juce::ValueTree &s)
+juce::Result PresetLibrary::validateParameters(const juce::ValueTree &s)
 {
-    if (!s.hasType("WubrotState") || s.hasProperty("sourceWav"))
-        return juce::Result::fail(
-            "Invalid preset state or embedded audio. Presets must contain analysis data only.");
+    if (!s.hasType("WubrotState"))
+        return juce::Result::fail("Invalid WUBROT state.");
     if(s.hasProperty("xyMapping"))
     {
         double version=0;
@@ -140,6 +139,20 @@ juce::Result PresetLibrary::validate(const juce::ValueTree &s)
     if (static_cast<float>(s.getChildWithProperty("id", "regionStart")["value"]) + .005f >
         static_cast<float>(s.getChildWithProperty("id", "regionEnd")["value"]))
         return juce::Result::fail("DNA START must precede END.");
+    for (const char* id : {"analysisStart", "analysisEnd"})
+    {
+        double d=0;
+        if(s.hasProperty(id)&&(!number(s[id],d)||d<0||d>1))
+            return juce::Result::fail("Invalid DNA region value: "+juce::String(id));
+    }
+    return juce::Result::ok();
+}
+juce::Result PresetLibrary::validate(const juce::ValueTree &s)
+{
+    if (s.hasProperty("sourceWav"))
+        return juce::Result::fail("Presets must contain analysis data only.");
+    const auto parameters = validateParameters(s);
+    if(parameters.failed())return parameters;
     for (const char *id : {"analysisStart", "analysisEnd"})
     {
         double d = 0;

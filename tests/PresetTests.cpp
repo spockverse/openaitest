@@ -74,10 +74,25 @@ int main()
         require(PresetLibrary::validName("Metallic Yoi").wasOk(), "valid name rejected");
         {
             WubrotProcessor factory(docs.getChildFile("Factory Test Documents"));
+            const auto originalContent=juce::SystemStats::getEnvironmentVariable("WUBROT_CONTENT_DIR",{});
+            const auto content=docs.getChildFile("Temporary Synthetic Factory Fixtures");
+            const char* folders[]{"01 Riddim Monster","02 Liquid Glass","03 Metal Teeth"};
+           #if JUCE_WINDOWS
+            _putenv_s("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8());
+           #else
+            setenv("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8(),1);
+           #endif
+            for(int i=0;i<3;++i){
+                const auto folder=content.getChildFile("Presets/Factory").getChildFile(folders[i]);folder.getChildFile("Samples").createDirectory();
+                require(juce::File(originalContent).getChildFile("Presets/Factory").getChildFile(folders[i]).getChildFile("preset.json").copyFileTo(folder.getChildFile("preset.json")),"Factory manifest fixture copy failed");
+                juce::String error;require(!factory.loadFactoryPreset(i,&error)&&error.contains(juce::String(folders[i])+"/Samples/dna.wav"),"Missing factory asset should fail explicitly");
+                require(factory.uiState()["name"].toString().isEmpty()&&!factory.hasUnsavedPresetChanges(),"Missing factory asset claimed loaded DNA or changed INIT");
+                const auto bytes=fixture();require(folder.getChildFile("Samples/dna.wav").replaceWithData(bytes.getData(),bytes.getSize()),"Temporary synthetic factory fixture failed");
+            }
             const float drives[]{12, 4, 20}, mutates[]{80, 55, 90}, xs[]{.3f, -.45f, .65f};
             for (int i = 0; i < 3; ++i)
             {
-                factory.loadFactoryPreset(i);
+                require(factory.loadFactoryPreset(i),"Factory fixture could not load");
                 wait(factory);
                 require(factory.getCurrentProgram() == i, "factory selection not retained");
                 require(std::abs(factory.parameters.getRawParameterValue("drive")->load() - drives[i]) <
@@ -91,6 +106,11 @@ int main()
             factory.setParameterValue("drive", 22);
             require(factory.saveUserPreset("Modified Factory").wasOk(),
                     "modified factory cannot save as user preset");
+           #if JUCE_WINDOWS
+            _putenv_s("WUBROT_CONTENT_DIR",originalContent.toRawUTF8());
+           #else
+            setenv("WUBROT_CONTENT_DIR",originalContent.toRawUTF8(),1);
+           #endif
         }
         WubrotProcessor p(docs);
         p.setParameterValue("x",.5f);p.setParameterValue("y",-.4f);

@@ -32,10 +32,10 @@ public:
     }
     void reset()
     {
-        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;activityHold=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;pendingRhythmTrigger=false;resetModulation();
+        clearAudio();smoothedSpectrum={};dnaPresence=0;fast=slow=brightness=0;silentFrames=0;activityHold=0;primed=false;loopTime=loopPatternTime=0;bypassWet=1;patternPosition=0;pendingRhythmTrigger=pendingRhythmSeek=false;resetModulation();
     }
     void resetModulation()noexcept{retriggerTime=retriggerPatternTime=0;modulation=0;detector=0;refractory=0;retriggerArmed=false;rhythm.reset();onset.reset();}
-    void seekRhythm(double ppq,double beats,int mode)noexcept{rhythm.seek(ppq,beats,mode);controlRemaining=0;}
+    void seekRhythm(double ppq,double beats,int mode)noexcept{seekPpq=ppq;seekBeats=beats;seekMode=mode;pendingRhythmSeek=true;}
     void triggerRhythm(bool midi=true)noexcept{pendingRhythmTrigger=true;pendingMidi=midi;}
     void setTimeline(double seconds)noexcept{seconds=std::max(0.0,seconds);if(std::abs(seconds-loopTime)>2/sampleRate)loopPatternTime=seconds*current.speed;loopTime=seconds;}
     void seekPattern(double seconds,float speed)noexcept{loopPatternTime=std::max(0.0,seconds)*speed;}
@@ -52,6 +52,8 @@ public:
         const bool expressiveXY=target.processingVersion>=9;
         const bool deepControls=target.processingVersion>=10;
         const bool dnaRefinement=target.processingVersion>=11;
+        // Sanitize before retaining the dry/bypass copy or feeding any state.
+        for(int ch=0;ch<std::min(channels,2);++ch)if(!std::isfinite(frame[ch]))frame[ch]=0;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
         if(!primed){current=target;loopPatternTime=loopTime*current.speed;bypassWet=target.enabled?1.0f:0.0f;primed=true;}
         const float goal=target.enabled?1.0f:0.0f,step=1/static_cast<float>(sampleRate*.005);
@@ -66,15 +68,20 @@ public:
         smooth(current.protect,std::clamp(target.protect,0.0f,1.0f));if(modern){const float m=std::clamp(target.mutate,0.f,1.f),stepM=1/float(sampleRate*.02);current.mutate+=std::clamp(m-current.mutate,-stepM,stepM);}else smooth(current.mutate,std::clamp(target.mutate,0.0f,1.0f));smooth(current.speed,std::clamp(target.speed,.25f,4.0f));
         smooth(current.pitch,std::clamp(target.pitch,-24.f,24.f));
         if(current.mode!=target.mode){current.mode=target.mode;resetModulation();}
+        // Apply the block's host anchor after a mode reset, then let a note at
+        // this sample take priority. Neither operation depends on UI timing.
+        if(pendingRhythmSeek){rhythm.seek(seekPpq,seekBeats,seekMode);controlRemaining=0;pendingRhythmSeek=false;}
         float peak=0,high=0,energy=0;
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
-            if(!std::isfinite(frame[ch]))frame[ch]=0;
             peak=std::max(peak,std::abs(frame[ch]));
             energy=std::max(energy,frame[ch]*frame[ch]);
             colour[static_cast<std::size_t>(ch)]+=colourCoefficient*(frame[ch]-colour[static_cast<std::size_t>(ch)]);
             high=std::max(high,std::abs(frame[ch]-colour[static_cast<std::size_t>(ch)]));
         }
+        // Also contain overflow from finite but pathological host input before
+        // it can enter the onset/envelope state. Ordinary samples are untouched.
+        if(!std::isfinite(energy)||!std::isfinite(high)){recoverInvalidAudio();for(int ch=0;ch<std::min(channels,2);++ch)frame[ch]=0;return;}
         if(refractory>0)--refractory;
         if(!target.rhythmic&&target.patternEnabled&&current.mode==1&&refractory==0&&peak>.015f&&peak>detector*1.8f+.008f)noteOn();
         if(target.rhythmic){rhythm.configure(target.bpm,target.regionBeats);const bool hit=onset.observe(energy);if(hit&&target.patternEnabled&&current.mode==1&&target.audioTriggers)triggerRhythm(false);}
@@ -180,6 +187,7 @@ public:
             }
             if(digitalRouting)sineCrush.process(frame,channels,dry.data());
             tonal.processModern(frame,channels,controlFix&&(expressiveXY||influence>0||tonal.transformationActive())?sineCrush.foundation():nullptr);
+            containAudio(frame,channels);
             const float lowerT=deepControls?std::clamp(2*current.signedY,0.f,1.f):0;
             const float conditioningActivity=std::max(current.activity,lowerT*lowerT*(3-2*lowerT));
             for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
@@ -196,6 +204,7 @@ public:
                 const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;
                 frame[ch]=original[c]+bypassWet*(processed-original[c]);
             }
+            containAudio(frame,channels);
             loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;
             if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
             if(target.rhythmic&&loaded)rhythm.advance(target.patternEnabled,current.mode);
@@ -230,6 +239,7 @@ public:
             frame[ch]=dc;
         }
         if(modern)tonal.processModern(frame,channels);else tonal.process(frame,channels,vowel,2.2f+influence*(3.0f*(1-rough)+crest),drive*(.5f+.45f*influence),signature,influence,current.pitch);
+        containAudio(frame,channels);
         for(int ch=0;ch<std::min(channels,2);++ch)
         {
             const auto c=static_cast<std::size_t>(ch);
@@ -249,11 +259,18 @@ public:
             const float processed=(dry[c]+current.mix*fieldBlend*(wet-dry[c]))*output;
             frame[ch]=bypassWet<=0?original[c]:bypassWet>=1?processed:original[c]+bypassWet*(processed-original[c]);
         }
+        containAudio(frame,channels);
         loopTime+=1/sampleRate;retriggerTime+=1/sampleRate;if(advancing){loopPatternTime+=current.speed/sampleRate;retriggerPatternTime+=current.speed/sampleRate;}
         if(target.rhythmic&&loaded)rhythm.advance(target.patternEnabled,current.mode);
     }
 private:
     friend struct DigitalRoutingProbe;
+    void recoverInvalidAudio()noexcept{clearAudio();fast=slow=brightness=detector=0;onset.reset();}
+    void containAudio(float* frame,int channels)noexcept{
+        bool invalid=false;
+        for(int ch=0;ch<std::min(channels,2);++ch)if(!std::isfinite(frame[ch])){frame[ch]=0;invalid=true;}
+        if(invalid)recoverInvalidAudio();
+    }
     void clearAudio()noexcept{controlRemaining=0;controlPrimed=false;excitationPrimed=false;excitationActive=false;excitationControl={};excitationStep={};low={};dcInput={};dcOutput={};colour={};nonlinear.reset();crusher.reset();tonal.reset();sineCrush.reset();}
     float coefficient(float seconds)const noexcept{return 1-std::exp(-1/static_cast<float>(sampleRate*seconds));}
     void smooth(float& v,float target)const noexcept{v+=smoothCoefficient*(target-v);}
@@ -269,5 +286,6 @@ private:
     DnaTemporalFrame modernShape;SignedCharacter modernCharacter;std::array<float,6> modernControl{},modernStep{};
     Parameters current;NonlinearStage nonlinear;CleanCrusher crusher;TonalDSP tonal;SineCrush sineCrush;
     DnaRhythmClock rhythm;DnaOnset onset;bool pendingRhythmTrigger=false,pendingMidi=false;
+    bool pendingRhythmSeek=false;double seekPpq=0,seekBeats=1;int seekMode=0;
     std::array<float,2> low{},dcInput{},dcOutput{},colour{};
 };

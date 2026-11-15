@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <thread>
 #include <chrono>
+#include <limits>
 
 static void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 static void waitForSample(WubrotProcessor& p)
@@ -91,8 +92,8 @@ static void checkRegionEditor()
 }
 static void checkRhythmicHost()
 {
-    struct Clock:juce::AudioPlayHead {bool playing=true,ppqOnly=false,hasTempo=true;double bpm=120;juce::int64 sample=0;
-        juce::Optional<PositionInfo> getPosition()const override{PositionInfo p;p.setIsPlaying(playing);if(!ppqOnly)p.setTimeInSamples(sample);p.setPpqPosition(sample/48000.*bpm/60);if(hasTempo)p.setBpm(bpm);return p;}} clock;
+    struct Clock:juce::AudioPlayHead {bool playing=true,ppqOnly=false,hasTempo=true;double bpm=120,ppqOffset=0;juce::int64 sample=0;
+        juce::Optional<PositionInfo> getPosition()const override{PositionInfo p;p.setIsPlaying(playing);if(!ppqOnly)p.setTimeInSamples(sample);p.setPpqPosition(sample/48000.*bpm/60+ppqOffset);if(hasTempo)p.setBpm(bpm);return p;}} clock;
     WubrotProcessor p;p.loadSampleBytes(wav(),"rhythm.wav");waitForSample(p);p.setPlayHead(&clock);
     auto block=[&](int n=128,int note=-1){juce::AudioBuffer<float>b(2,n);for(int ch=0;ch<2;++ch)for(int i=0;i<n;++i)b.setSample(ch,i,.2f);juce::MidiBuffer m;if(note>=0)m.addEvent(juce::MidiMessage::noteOn(1,48,juce::uint8(100)),note);p.processBlock(b,m);if(clock.playing)clock.sample+=n;return p.modulationPosition();};
     for(double bpm:{80.,120.,174.}){clock.sample=0;clock.bpm=bpm;p.prepareToPlay(48000,128);p.setDnaRhythmValue(DnaTiming::value(2));for(int i=0;i<20;++i)block();const double expected=std::fmod((clock.sample-1)*bpm/(60*48000),1.);require(std::abs(p.modulationPosition()-expected)<1.e-8,"Actual processor rhythmic phase not sample-accurate");
@@ -100,6 +101,18 @@ static void checkRhythmicHost()
         clock.sample=48000;const auto seek=block();const double target=std::fmod((48000+127)*bpm/(60*48000),1.);require(std::abs(seek-target)<1.e-8,"Actual host seek not reflected by DSP playhead");
         clock.sample=0;require(std::abs(block()-127*bpm/(60*48000))<1.e-8,"Host loop not anchored");}
     clock.sample=0;clock.bpm=120;clock.ppqOnly=true;p.prepareToPlay(48000,128);for(int i=0;i<10;++i)block();require(std::abs(p.modulationPosition()-1279./24000)<1.e-8,"PPQ-only host synchronization failed");
+    for(double jump:{.005,-.003,.0002}){clock.ppqOffset+=jump;require(std::abs(block()-((clock.sample-1)/24000.+clock.ppqOffset))<1.e-8,"Small PPQ-only seek not reflected by native phase");}
+    // Even changes smaller than the two-sample noise tolerance must not drift.
+    for(int i=0;i<300;++i){clock.ppqOffset+=.25/24000;const auto phase=block();require(std::abs(phase-std::fmod((clock.sample-1)/24000.+clock.ppqOffset,1.))<=2.01/24000,"Sub-tolerance PPQ drift accumulated");}
+    clock.ppqOffset=0;
+    for(bool ppqOnly:{false,true}){
+        clock.ppqOnly=ppqOnly;clock.sample=-48000;p.setParameterValue("mode",1);p.prepareToPlay(48000,128);
+        block(128,0);require(std::abs(block()-255./24000)<1.e-8,"Negative pre-roll repeatedly resets RETRIGGER");
+        p.setParameterValue("mode",0);clock.sample=60000;require(std::abs(block()-(.5+127./24000))<1.e-8,"Mode change erased host-aligned seek");
+        clock.sample=-36000;p.prepareToPlay(48000,128);require(std::abs(block()-(.5+127./24000))<1.e-8,"Negative LOOP phase incorrect");
+        require(std::abs(block()-(.5+255./24000))<1.e-8,"Negative LOOP pre-roll repeatedly reanchored");
+    }
+    clock.sample=0;clock.ppqOnly=true;
     clock.hasTempo=false;p.prepareToPlay(48000,128);block();require(double(p.uiState()["bpm"])==120&&!bool(p.uiState()["tempoKnown"]),"Missing-BPM fallback not documented in state");
     p.setParameterValue("mode",1);p.prepareToPlay(48000,128);clock.sample=0;block(128,63);require(std::abs(p.modulationPosition()-64./24000)<1.e-8,"Processor MIDI offset retrigger incorrect");
     for(int i=0;i<200;++i)block();require(p.modulationPosition()==1,"One-shot processor does not hold END");block(128,91);require(std::abs(p.modulationPosition()-36./24000)<1.e-8,"Next MIDI note failed to restart");
@@ -110,6 +123,43 @@ static void checkRhythmicHost()
     juce::MemoryBlock legacyBytes;juce::AudioProcessor::copyXmlToBinary(*legacyXml,legacyBytes);WubrotProcessor legacy;legacy.setStateInformation(legacyBytes.getData(),int(legacyBytes.getSize()));waitForSample(legacy);
     require(!bool(legacy.uiState()["dnaSync"])&&float(legacy.uiState()["dnaPitch"])==0&&float(legacy.uiState()["dnaSpeed"])==2&&legacy.parameters.getParameter("dnaSpeed")->getText(.5f,32)=="LEGACY","Legacy timing/automation/default pitch migration failed");
     legacy.setDnaRhythmValue(DnaTiming::value(2));require(bool(legacy.uiState()["dnaSync"])&&legacy.parameters.getParameter("dnaSpeed")->getText(.2f,32)=="1/4","Legacy instance cannot opt in to rhythmic timing");p.setPlayHead(nullptr);
+}
+static void checkMalformedProjectState()
+{
+    WubrotProcessor p,reference;
+    p.setParameterValue("x",.4f);p.setParameterValue("y",-.3f);p.setParameterValue("dnaPitch",7);
+    p.loadSampleBytes(wav(),"validation.wav");waitForSample(p);
+    juce::MemoryBlock valid;p.getStateInformation(valid);
+    reference.setStateInformation(valid.getData(),int(valid.getSize()));waitForSample(reference);
+    p.prepareToPlay(48000,128);reference.prepareToPlay(48000,128);
+    const auto original=juce::AudioProcessor::getXmlFromBinary(valid.getData(),int(valid.getSize()));
+    int frames=0;
+    auto compare=[&]{
+        juce::AudioBuffer<float> a(2,128),b(2,128);juce::MidiBuffer ma,mb;
+        for(int ch=0;ch<2;++ch)for(int i=0;i<128;++i){const float v=.3f*std::sin((frames+i)*.043f);a.setSample(ch,i,v);b.setSample(ch,i,v);}
+        p.processBlock(a,ma);reference.processBlock(b,mb);frames+=128;
+        for(int ch=0;ch<2;++ch)for(int i=0;i<128;++i)require(std::isfinite(a.getSample(ch,i))&&a.getSample(ch,i)==b.getSample(ch,i),"Malformed state changed/poisoned the last valid sound");
+    };
+    auto reject=[&](juce::XmlElement& xml){
+        juce::MemoryBlock bad;juce::AudioProcessor::copyXmlToBinary(xml,bad);p.setStateInformation(bad.getData(),int(bad.getSize()));
+        require(p.uiState()["status"].toString().containsIgnoreCase("rejected"),"Invalid project state was accepted");
+        require(p.uiState()["name"].toString()=="validation.wav","Invalid state replaced working DNA");compare();
+    };
+    for(const auto* child:original->getChildIterator()){
+        const auto id=child->getStringAttribute("id");
+        if(!child->hasTagName("PARAM"))continue;
+        for(const auto* text:{"nan","NaN","inf","+inf","-inf","1e309","oops","","-100000","100000"}){
+            auto xml=std::make_unique<juce::XmlElement>(*original);xml->getChildByAttribute("id",id)->setAttribute("value",text);reject(*xml);
+        }
+    }
+    for(const char* id:{"mode","protect","enabled"}){auto xml=std::make_unique<juce::XmlElement>(*original);xml->getChildByAttribute("id",id)->setAttribute("value",.5);reject(*xml);}
+    for(const char* id:{"analysisStart","analysisEnd"})for(const char* value:{"nan","inf","-inf","-1","2"}){auto xml=std::make_unique<juce::XmlElement>(*original);xml->setAttribute(id,value);reject(*xml);}
+    {auto xml=std::make_unique<juce::XmlElement>(*original);xml->addChildElement(new juce::XmlElement(*xml->getChildByAttribute("id","dnaPitch")));reject(*xml);}
+    {auto xml=std::make_unique<juce::XmlElement>(*original);xml->removeChildElement(xml->getChildByAttribute("id","x"),true);reject(*xml);}
+    {auto xml=std::make_unique<juce::XmlElement>(*original);xml->getChildByAttribute("id","regionStart")->setAttribute("value",1);reject(*xml);}
+    // A subsequent valid restore must recover without prepareToPlay/reset.
+    p.setStateInformation(valid.getData(),int(valid.getSize()));reference.setStateInformation(valid.getData(),int(valid.getSize()));waitForSample(p);waitForSample(reference);
+    for(int i=0;i<20;++i)compare();
 }
 static void checkHostClock()
 {
@@ -193,6 +243,7 @@ int main()
         checkVisualObserver();
         checkHostClock();
         checkRhythmicHost();
+        checkMalformedProjectState();
         checkLoadingRoutes();
         checkDnaRouting();
         checkRegionEditor();
@@ -278,6 +329,12 @@ int main()
         require(p.loadFactoryPreset(0), "factory sample could not load from nested preset folder"); waitForSample(p);
         require(p.uiState()["name"].toString() == "dna.wav", "factory preset did not load its sample");
         require(std::abs(p.parameters.getRawParameterValue("mutate")->load() - 88) < .01f, "factory parameters not applied");
+        juce::MemoryBlock beforeMissing;p.getStateInformation(beforeMissing);
+        const auto beforeMissingUi=p.uiState();
+        factory.getChildFile("Samples/dna.wav").deleteFile();juce::String missingError;
+        require(!p.loadFactoryPreset(0,&missingError)&&missingError.contains("01 Riddim Monster/Samples/dna.wav"),"Missing factory asset has no exact diagnostic");
+        require(p.uiState()["name"]==beforeMissingUi["name"]&&p.uiState()["xyMapping"]==beforeMissingUi["xyMapping"]&&p.uiState()["waveform"].size()==128,"Missing factory asset discarded current DNA");
+        juce::MemoryBlock afterMissing;p.getStateInformation(afterMissing);require(beforeMissing==afterMissing,"Missing factory asset changed project/preset state");
         folder.deleteRecursively();
         std::cout << "PASS: real WAV decoding, audio modulation, project recall, invalid/silent file recovery, MIDI retrigger, clear-state recall, nested factory preset sample\n";
         return 0;

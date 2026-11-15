@@ -109,6 +109,11 @@ async function assertGesture(p) {
       assert.equal(await p.locator('#dnaPitchValue').textContent(),'+1 st');
       assert(await p.evaluate(()=>messages.some(m=>m.id==='dnaPitch'&&m.type==='parameter'&&m.value===1)));
       await recall(p,{dnaPitch:-12});assert.equal(await p.locator('#dnaPitchValue').textContent(),'-12 st');
+      for(const [value,label] of [[.01,'+0.01 st'],[.04,'+0.04 st'],[-.04,'-0.04 st'],[1.25,'+1.25 st'],[-23.99,'-23.99 st'],[24,'+24 st'],[0,'0 st']]){
+        await recall(p,{dnaPitch:value});assert.equal(await p.locator('#dnaPitchValue').textContent(),label);
+        assert.equal(await p.locator('#dnaPitchKnob').getAttribute('aria-valuetext'),label);
+        assert(await p.locator('#dnaPitchValue').evaluate(el=>el.scrollWidth<=el.clientWidth),'Pitch readout clips at this size/DPI');
+      }
       await p.locator('#dnaPitchKnob').dblclick();assert.equal(await p.locator('#dnaPitchValue').textContent(),'0 st');
       const pitch=await p.locator('#dnaPitchKnob').boundingBox();
       await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2);await p.mouse.down();await p.keyboard.down('Shift');await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2-40*scale,{steps:10});await p.mouse.up();await p.keyboard.up('Shift');

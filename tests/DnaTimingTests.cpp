@@ -1,12 +1,29 @@
 #include "ControlFixtures.h"
 #include "fixtures/v048/CrushDSP.h"
+#include <limits>
 struct DigitalRoutingProbe {
     static float resonance(const CrushDSP& d){return std::atan(d.tonal.modern[0])*sr/3.14159265359f;}
     static float carrier(const CrushDSP& d){return d.sineCrush.control[0];}
 };
 static DnaProfile fixedProfile(float hz=300){auto p=analyse(reference(0));p.spectrum.peaks={hz,hz*1.7f,hz*2.8f};p.spectrum.prepareDerived();for(auto& f:p.spectralFrames)f=DnaTemporalFrame::from(p.spectrum);return p;}
 static CrushDSP::Parameters controls(float pitch=0){auto m=XYMapping::map(.4f,-.35f,sr,11);CrushDSP::Parameters p;p.processingVersion=11;p.centered=true;p.signedX=.4;p.signedY=-.35;p.activity=m.activity;p.bits=m.bits;p.rate=m.rate;p.drive=18;p.mutate=1;p.mix=1;p.output=0;p.rhythmic=true;p.regionBeats=1;p.bpm=120;p.pitch=pitch;return p;}
+static void checkInvalidAudio(){
+ auto profile=fixedProfile();
+ for(int version=1;version<=11;++version)for(int channels:{1,2})for(float mix:{0.f,.5f,1.f})for(bool enabled:{false,true})for(bool center:{false,true}){
+  CrushDSP a,b;a.prepare(sr);b.prepare(sr);auto p=controls();p.processingVersion=version;p.centered=version>=2;p.rhythmic=version>=11;p.mix=mix;p.enabled=enabled;if(center)p.activity=0;
+  for(int i=0;i<2048;++i){p.enabled=i<1024?enabled:!enabled;float x[]{.3f*std::sin(i*.031f),-.2f*std::sin(i*.047f)},y[]{x[0],x[1]};
+   if(i%173==0){constexpr float invalid[]{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()};x[(i/173)%channels]=invalid[(i/173)%3];y[(i/173)%channels]=0;}
+   a.processFrame(x,channels,p,&profile);b.processFrame(y,channels,p,&profile);
+   for(int ch=0;ch<channels;++ch)require(std::isfinite(x[ch])&&x[ch]==y[ch],"Invalid audio escaped or poisoned dry/wet/bypass/legacy state");
+  }
+  float overflow[]{std::numeric_limits<float>::max(),-std::numeric_limits<float>::max()};a.processFrame(overflow,channels,p,&profile);
+  for(int ch=0;ch<channels;++ch)require(std::isfinite(overflow[ch]),"Intermediate overflow escaped");
+  double energy=0;for(int i=0;i<2048;++i){float x[]{.3f*std::sin(i*.031f),-.2f*std::sin(i*.047f)};a.processFrame(x,channels,p,&profile);for(int ch=0;ch<channels;++ch){require(std::isfinite(x[ch]),"Persistent DSP state failed to recover after overflow");energy+=x[ch]*x[ch];}}
+  require(energy>0&&std::isfinite(a.getPatternPosition()),"Valid audio/timing did not recover");
+ }
+}
 int main(){
+ checkInvalidAudio();
  for(double fs:{44100.,48000.,96000.})for(double bpm:{80.,120.,174.})for(double beats:DnaTiming::beats){DnaRhythmClock c;c.prepare(fs);c.configure(bpm,beats);
   const int n=int(std::round(fs*60*beats/bpm));for(int i=0;i<n;++i)c.advance(true,0);
   const double expected=std::fmod(n*bpm/(60*fs*beats),1.);const double diff=std::abs(c.position()-expected);

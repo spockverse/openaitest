@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <new>
+#include <limits>
 #include <thread>
 #include <vector>
 #if defined(_WIN32)
@@ -133,6 +134,7 @@ int main()
                     b.setSample(0, i, v);
                     b.setSample(1, i, -v);
                 }
+                if((frame/128)%17==0){b.setSample(0,63,std::numeric_limits<float>::quiet_NaN());b.setSample(1,64,std::numeric_limits<float>::infinity());}
                 callback = true;
                 p.processBlock(b, midi);
                 callback = false;
