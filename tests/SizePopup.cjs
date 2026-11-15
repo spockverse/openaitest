@@ -24,8 +24,10 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
         assert(Math.abs(shell.width-width)<1 && shell.height<=height && height-shell.height<1);
         const scale = width/1200;
         const field = await page.locator('#field').boundingBox();
-        // Preserve the original control scale, and verify XY after the height change.
-        assert(Math.abs(field.width/width-.49532552)<.0001);
+        // Preserve the approved fader-column layout at every size and DPI.
+        assert(Math.abs(field.width/width-.44361979)<.0001);
+        const rail=await page.locator('.xy-coordinates').boundingBox(),panel=await page.locator('.field').boundingBox();
+        assert(rail.x>=field.x+field.width+2*scale&&rail.x+rail.width<panel.x+panel.width&&rail.y+rail.height<panel.y+panel.height,'XY faders overlap the field or panel edge');
         await page.mouse.move(field.x+field.width/2,field.y+field.height/2);
         await page.mouse.down();
         await page.mouse.move(field.x+field.width*.6,field.y+field.height*.4);
