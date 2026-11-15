@@ -44,6 +44,13 @@ async function assertGesture(p) {
         } } };
       });
       await p.setContent(html);
+      // The supplied close-up fixes the panel geometry on the 1200px design canvas.
+      const dnaPanel = await p.locator('.dna').boundingBox();
+      const enginePanel = await p.locator('.engine').boundingBox();
+      for (const [actual, expected] of [[dnaPanel.width,474],[dnaPanel.height,358],
+        [enginePanel.width,474],[enginePanel.height,353],[enginePanel.y-dnaPanel.y-dnaPanel.height,22]])
+        assert(Math.abs(actual / scale - expected) < .1, 'Reference panel proportions changed');
+      assert(await p.locator('.dna-empty').isHidden(), 'Empty-loader art obscures the loaded waveform');
       assert.equal(await p.locator('#dnaLoop,#dnaRetrigger,.dna-mode,#speedDown,#speedUp,select#dnaSpeed').count(), 0);
       assert.equal(await p.locator('.dna-speed-knob').count(), 2);
       assert.equal(await p.locator('#regionLoop').count(), 1);
