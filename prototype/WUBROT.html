@@ -45,8 +45,8 @@ body{padding:12px;background:#08080c}.shell{max-width:1440px;padding:35px 32px 2
 .motion-paused .orb-aura *{animation:none;will-change:auto}
 @media(prefers-reduced-motion:reduce){.orb-aura,.orb-aura *{animation:none;will-change:auto}}
 #field:focus-visible{outline:none}.keyboard-nav .xybox:has(#field:focus-visible){border-radius:50%;box-shadow:0 0 0 1px #be7ee766}
-.field .xybox{width:calc(100% - 100px);margin:8px 100px -6px 0}.field .axis-x{width:calc(100% - 100px)}
-.xy-coordinates{position:absolute;right:20px;top:86px;width:88px;display:flex;flex-direction:column;align-items:center;gap:28px}
+.field{display:grid;grid-template-columns:minmax(0,1fr) 88px;grid-template-rows:auto minmax(0,1fr) auto;column-gap:8px}.field>.row{grid-column:1/-1}.field .xybox{grid-column:1/-1;grid-row:2;width:calc(100% - 80px);aspect-ratio:1 / 1;margin:0;align-self:center}.field .axis-x{grid-column:1;grid-row:3;width:100%;margin:0 0 22px}.field .axis-y{left:-14px;white-space:nowrap;height:max-content;max-height:none}
+.xy-coordinates{position:relative;right:auto;top:auto;grid-column:2;grid-row:2;align-self:center;width:88px;display:flex;flex-direction:column;align-items:center;gap:28px}
 .xy-coordinate{display:flex;flex-direction:column;align-items:center;gap:10px;width:88px;color:#d19de6}
 .xy-coordinate-head{display:flex;align-items:center;justify-content:space-between;width:60px;height:27px;font-size:22px}
 .xy-automation{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1px solid #6e587d88;border-radius:5px;background:linear-gradient(#28202f,#1b1722);color:#c595df}
