@@ -45,6 +45,29 @@ body{padding:12px;background:#08080c}.shell{max-width:1440px;padding:35px 32px 2
 .motion-paused .orb-aura *{animation:none;will-change:auto}
 @media(prefers-reduced-motion:reduce){.orb-aura,.orb-aura *{animation:none;will-change:auto}}
 #field:focus-visible{outline:none}.keyboard-nav .xybox:has(#field:focus-visible){border-radius:50%;box-shadow:0 0 0 1px #be7ee766}
+.field .xybox{width:calc(100% - 100px);margin:8px 100px -6px 0}.field .axis-x{width:calc(100% - 100px)}
+.xy-coordinates{position:absolute;right:20px;top:86px;width:88px;display:flex;flex-direction:column;align-items:center;gap:28px}
+.xy-coordinate{display:flex;flex-direction:column;align-items:center;gap:10px;width:88px;color:#d19de6}
+.xy-coordinate-head{display:flex;align-items:center;justify-content:space-between;width:60px;height:27px;font-size:22px}
+.xy-automation{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1px solid #6e587d88;border-radius:5px;background:linear-gradient(#28202f,#1b1722);color:#c595df}
+.xy-automation svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.xy-fader-shell{position:relative;width:24px;height:180px}
+.xy-fader-shell:before{content:'';position:absolute;top:0;bottom:0;left:6px;right:6px;border:1px solid #3d3348;border-radius:7px;background:#0d0b13;box-shadow:inset 0 1px 4px #0009}
+.xy-fader-shell:after{content:'';position:absolute;bottom:2px;left:8px;width:8px;height:calc(10px + 156px * var(--xy-unit));border-radius:5px;background:linear-gradient(#d28bf3,#bc62e6);box-shadow:0 0 7px #c16cec99,0 0 12px #b64ee94d;pointer-events:none}
+.xy-fader{position:relative;z-index:1;appearance:none;-webkit-appearance:none;writing-mode:vertical-lr;direction:rtl;width:24px;height:180px;padding:0;margin:0;border:0;background:transparent;cursor:ns-resize;touch-action:none}
+.xy-fader::-webkit-slider-runnable-track{width:24px;height:100%;border:0;background:transparent}
+.xy-fader::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:24px;height:24px;border:1px solid #dca9f0;border-radius:50%;background:radial-gradient(circle,#fff2ff 14%,#efd1fa 29%,#c985e4 59%,#874ca3 85%);box-shadow:0 0 0 4px #ba5ee02b,0 0 10px #cb81eaad}
+.xy-fader:focus-visible{outline:1px solid #be7ee788;outline-offset:5px;border-radius:8px}
+.xy-coordinate-value{display:flex;align-items:center;justify-content:center;gap:1px;width:88px;height:30px;padding:2px 4px;border:1px solid #6e487f77;border-radius:5px;background:#281c33aa;color:#d8a7ed;font-size:20px;box-shadow:inset 0 1px #e5c5fa08}
+.xy-coordinate-value:focus-within{border-color:#c58ae8;box-shadow:0 0 7px #b65dd72b}
+.xy-coordinate-value input{width:62px;min-width:0;height:23px;padding:0;border:0;border-radius:2px;background:transparent;color:inherit;font:20px ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;text-align:right}
+.xy-coordinate-value input[aria-invalid=true]{text-decoration:underline dotted #c794df;text-underline-offset:3px}
+.xy-edit-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.power-off .xy-coordinate,.power-off .xy-automation,.power-off .xy-coordinate-value{color:#99999f}.power-off .xy-automation,.power-off .xy-coordinate-value{border-color:#505057;background:#25252c;box-shadow:none}
+.power-off .xy-fader-shell:before{border-color:#3c3c42;background:#101015}.power-off .xy-fader-shell:after{background:linear-gradient(#808089,#62626d);box-shadow:none}
+.power-off .xy-fader::-webkit-slider-thumb{border-color:#85858d;background:radial-gradient(circle,#c1c1c8 14%,#a6a6b0 29%,#71717e 59%,#484852 85%);box-shadow:inset 0 0 2px #0007}
+.power-off .xy-coordinate-value:focus-within{border-color:#8c8c92;box-shadow:none}
+
 .sample-footer{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:6px}.sample-footer .sample-status{margin:0;flex:1;font-size:11px;min-height:16px}
 </style>
 <style>
@@ -97,6 +120,7 @@ body{transition:background-color 240ms ease}body:has(.shell.power-off){backgroun
   <section class="panel field"><div class="row"><h1 class="title">CRUSH FIELD</h1><button id="liquid" class="liquid" aria-pressed="true">LIQUID PHYSICS / ON</button></div>
    <div class="xybox"><canvas id="gelSurface" width="640" height="640" aria-hidden="true"></canvas><div class="orb-anchor" aria-hidden="true"><div class="orb-aura"></div></div><span class="axis-y">SAMPLE-RATE REDUCTION →</span><canvas id="field" width="640" height="640" tabindex="0" role="group" aria-label="Crush field. Arrow keys move the orb. Right reduces bit depth; up increases sample-rate reduction. Home resets."></canvas></div>
    <div class="axis-x">BIT DEPTH →</div><div class="readouts"><span>BITS <b id="bits">16.0</b></span><span>RATE <b id="rate">8.0 kHz</b></span><span id="position">X 50 / Y 50</span></div>
+   <div class="xy-coordinates" role="group" aria-label="Crush Field coordinates" title="X increases to the right; Y increases upward. Positions outside the circular field stay on its rim."><div class="xy-coordinate"><div class="xy-coordinate-head"><label id="xyXLabel" for="xyXSlider">X</label><span class="xy-automation" title="Automation: Crush Field X"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 7 9l4 3 6-8M13 4h4v4"/></svg></span></div><div class="xy-fader-shell" id="xyXTrack" style="--xy-unit:.5"><input id="xyXSlider" class="xy-fader" type="range" min="0" max="100" step="any" value="50" aria-labelledby="xyXLabel" aria-valuetext="50.0%" aria-description="Automatable Crush Field X coordinate in percent"></div><label class="xy-coordinate-value"><input id="xyX" type="text" inputmode="decimal" role="spinbutton" aria-label="X coordinate, percent" aria-describedby="xyCoordinateStatus" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50.0%" value="50.0" autocomplete="off" spellcheck="false"><span aria-hidden="true">%</span></label></div><div class="xy-coordinate"><div class="xy-coordinate-head"><label id="xyYLabel" for="xyYSlider">Y</label><span class="xy-automation" title="Automation: Crush Field Y"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 7 9l4 3 6-8M13 4h4v4"/></svg></span></div><div class="xy-fader-shell" id="xyYTrack" style="--xy-unit:.5"><input id="xyYSlider" class="xy-fader" type="range" min="0" max="100" step="any" value="50" aria-labelledby="xyYLabel" aria-valuetext="50.0%" aria-description="Automatable Crush Field Y coordinate in percent"></div><label class="xy-coordinate-value"><input id="xyY" type="text" inputmode="decimal" role="spinbutton" aria-label="Y coordinate, percent" aria-describedby="xyCoordinateStatus" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50.0%" value="50.0" autocomplete="off" spellcheck="false"><span aria-hidden="true">%</span></label></div><span id="xyCoordinateStatus" class="xy-edit-status" role="status" aria-live="polite"></span></div>
    <p class="keyboard">Drag anywhere in the circle · Arrow keys to move · Home to reset</p>
   </section>
   <div class="right">
@@ -422,32 +446,55 @@ function freezeField(){
  if(gpu&&jelly.complete&&jelly.naturalWidth){const fc=frozenSurface.getContext('2d');fc.clearRect(0,0,640,640);fc.drawImage(surface,0,0);frozenSurface.style.display='block';surface.style.visibility='hidden';}
  paint(!gpu);
 }
-const nativeTouches=new Set();
+const nativeTouches=new Set(),xyDrafts=new Set(),xyParameterValues={x:0,y:0},xyPendingWrites={x:0,y:0};
+let xyWriteSequence=0;
 function beginNativeTouch(id){if(!nativeTouches.has(id)){nativeTouches.add(id);nativeEvent("gesture",{id,start:true});}}
 function endNativeTouch(id){if(nativeTouches.delete(id))nativeEvent("gesture",{id,start:false});}
 function nativeEvent(type,data={}){if(nativeBackend&&!applyingNative)nativeBackend.emitEvent('wubrot',{type,...data});}
-function nativeParameter(id,value){nativeEvent('parameter',{id,value});}
+function nativeParameter(id,value){if(applyingNative)return;const data={id,value};if(nativeBackend&&(id==='x'||id==='y'))data.xyWrite=xyPendingWrites[id]=++xyWriteSequence;nativeEvent('parameter',data);}
 function setDnaMode(mode,notify=true){dnaMode=mode===1?1:0;const toggle=$('regionLoop');toggle.dataset.mode=dnaMode;toggle.setAttribute('aria-checked',String(dnaMode===1));toggle.setAttribute('aria-label',dnaMode===0?'DNA mode: LOOP. Switch to RETRIGGER':'DNA mode: RETRIGGER. Switch to LOOP');if(notify){nativeEvent('gesture',{id:'mode',start:true});nativeParameter('mode',dnaMode);nativeEvent('gesture',{id:'mode',start:false});}}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function project(x,y){const len=Math.hypot(x,y);return len>1?{x:x/len,y:y/len}:{x,y};}
-function readouts(){const bits=nativeBits,rate=nativeRate;$('bits').textContent=bits.toFixed(1);$('rate').textContent=(rate/1000).toFixed(1)+' kHz';$('position').textContent=`X ${Math.round((px+1)*50)} / Y ${Math.round((1-py)*50)}`;canvas.setAttribute('aria-description',`${bits.toFixed(1)} bits, ${(rate/1000).toFixed(1)} kilohertz`);}
+function coordinatePercent(id){return clamp((1+(id==='x'?px:-py))*50,0,100);}
+function readouts(){const bits=nativeBits,rate=nativeRate;$('bits').textContent=bits.toFixed(1);$('rate').textContent=(rate/1000).toFixed(1)+' kHz';$('position').textContent=`X ${((px+1)*50).toFixed(1)} / Y ${((1-py)*50).toFixed(1)}`;for(const id of ['x','y']){const e=$(id==='x'?'xyX':'xyY'),value=coordinatePercent(id);if(!xyDrafts.has(id))e.value=value.toFixed(1);e.setAttribute('aria-valuenow',String(value));e.setAttribute('aria-valuetext',value.toFixed(1)+'%');const slider=$(id==='x'?'xyXSlider':'xyYSlider');slider.value=value;slider.setAttribute('aria-valuetext',value.toFixed(1)+'%');$(id==='x'?'xyXTrack':'xyYTrack').style.setProperty('--xy-unit',String(value/100));}canvas.setAttribute('aria-description',`${bits.toFixed(1)} bits, ${(rate/1000).toFixed(1)} kilohertz`);}
 function setXY(x,y,excite=true,elapsed=1/30){
+ if(!Number.isFinite(x)||!Number.isFinite(y))return;
+ for(const id of ['x','y'])if(!xyDrafts.has(id))$(id==='x'?'xyX':'xyY').removeAttribute('aria-invalid');
+ $('xyCoordinateStatus').textContent='';
  const p=project(x,y);
  if(!awaitingNativePower&&engineIsOn()&&excite&&motion&&liquid){
   const dna=sampleLoaded?+$('mutate').value/100:0;
   const profile=waveform?waveform[Math.min(127,Math.floor((p.x+1)*63.5))]:0;
   gel.impulse(px,py,p.x,p.y,elapsed,sharpness*dna,1+dna*(profile-.5)*.5);
  }
- px=p.x;py=p.y;readouts();nativeParameter("x",px);nativeParameter("y",py);schedule();
+ px=p.x;py=p.y;readouts();
+ if(applyingNative){xyParameterValues.x=x;xyParameterValues.y=y;}
+ else for(const id of ['x','y'])if(Math.abs(p[id]-xyParameterValues[id])>2e-7){xyParameterValues[id]=p[id];nativeParameter(id,p[id]);}
+ schedule();
+}
+function parseCoordinate(text){text=text.trim().replace(',','.').replace(/%$/,'').trim();return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)&&Number.isFinite(Number(text))?clamp(Number(text),0,100):null;}
+function editCoordinate(id,value){const raw=id==='x'?value/50-1:1-value/50,p=project(id==='x'?raw:px,id==='y'?raw:py),changed=['x','y'].filter(axis=>Math.abs(p[axis]-xyParameterValues[axis])>2e-7&&!nativeTouches.has(axis));for(const axis of changed)beginNativeTouch(axis);try{setXY(p.x,p.y);}finally{for(const axis of changed)endNativeTouch(axis);}}
+for(const id of ['x','y']){
+ const e=$(id==='x'?'xyX':'xyY');
+ const commit=()=>{if(!xyDrafts.delete(id))return;const value=parseCoordinate(e.value);e.setAttribute('aria-invalid',String(value===null));$('xyCoordinateStatus').textContent=value===null?'Enter a number from 0 to 100 percent. Previous position kept.':'';if(value!==null)editCoordinate(id,value);readouts();};
+ e.addEventListener('input',()=>{xyDrafts.add(id);e.removeAttribute('aria-invalid');$('xyCoordinateStatus').textContent='';});
+ e.addEventListener('blur',commit);
+ const slider=$(id==='x'?'xyXSlider':'xyYSlider');
+ slider.addEventListener('pointerdown',event=>{if(event.button!==0)return;slider.setPointerCapture(event.pointerId);beginNativeTouch(id);});
+ slider.addEventListener('input',()=>{xyDrafts.delete(id);e.removeAttribute('aria-invalid');$('xyCoordinateStatus').textContent='';editCoordinate(id,Number(slider.value));});
+ for(const event of ['pointerup','pointercancel','lostpointercapture','blur','keyup'])slider.addEventListener(event,()=>endNativeTouch(id));
+ slider.addEventListener('keydown',event=>{let value=coordinatePercent(id);if(['ArrowUp','ArrowRight','ArrowDown','ArrowLeft'].includes(event.key))value+=(['ArrowUp','ArrowRight'].includes(event.key)?1:-1)*(event.shiftKey?.01:.1);else if(event.key==='Home')value=0;else if(event.key==='End')value=100;else return;event.preventDefault();xyDrafts.delete(id);beginNativeTouch(id);editCoordinate(id,clamp(value,0,100));});
+
+ e.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();e.blur();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();xyDrafts.delete(id);e.removeAttribute('aria-invalid');$('xyCoordinateStatus').textContent='';readouts();e.blur();}else if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();const value=(xyDrafts.has(id)?parseCoordinate(e.value):coordinatePercent(id))??coordinatePercent(id);xyDrafts.delete(id);e.removeAttribute('aria-invalid');editCoordinate(id,clamp(value+(event.key==='ArrowUp'?1:-1)*(event.shiftKey?.01:.1),0,100));}});
 }
 function pointer(e,excite=true){
  const b=canvas.getBoundingClientRect(),elapsed=Math.max(.004,Math.min(.12,(e.timeStamp-pointerTime)/1000));
  setXY((e.clientX-b.left-b.width/2)/(b.width*.421875),(e.clientY-b.top-b.height/2)/(b.height*.421875),excite,elapsed);pointerTime=e.timeStamp;
 }
-canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;dragging=true;canvas.setPointerCapture(e.pointerId);canvas.focus();nativeEvent("gesture",{id:"x",start:true});nativeEvent("gesture",{id:"y",start:true});pointer(e,false);});
+canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;dragging=true;canvas.setPointerCapture(e.pointerId);canvas.focus();beginNativeTouch('x');beginNativeTouch('y');pointer(e,false);});
 canvas.addEventListener('pointermove',e=>{if(dragging)pointer(e);});
-const end=()=>{if(dragging){nativeEvent('gesture',{id:'x',start:false});nativeEvent('gesture',{id:'y',start:false});}dragging=false;};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
-canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=py;if(e.key==='ArrowLeft')x-=step;else if(e.key==='ArrowRight')x+=step;else if(e.key==='ArrowUp')y-=step;else if(e.key==='ArrowDown')y+=step;else if(e.key==='Home'){x=0;y=0;}else return;e.preventDefault();nativeEvent("gesture",{id:"x",start:true});nativeEvent("gesture",{id:"y",start:true});setXY(x,y);nativeEvent("gesture",{id:"x",start:false});nativeEvent("gesture",{id:"y",start:false});});
+const end=()=>{if(dragging){endNativeTouch('x');endNativeTouch('y');}dragging=false;};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
+canvas.addEventListener('keydown',e=>{const step=e.shiftKey?.08:.02;let x=px,y=py;if(e.key==='ArrowLeft')x-=step;else if(e.key==='ArrowRight')x+=step;else if(e.key==='ArrowUp')y-=step;else if(e.key==='ArrowDown')y+=step;else if(e.key==='Home'){x=0;y=0;}else return;e.preventDefault();beginNativeTouch('x');beginNativeTouch('y');setXY(x,y);endNativeTouch('x');endNativeTouch('y');});
 const membrane={x:0,y:0,vx:0,vy:0};
 const audioVisual=new AudioReactiveVisual();
 const fallbackGrid=8,fallbackSectors=64,fallbackPoints=new Float32Array(9*65*2),fallbackSources=new Float32Array(9*65*2);
@@ -659,7 +706,7 @@ if(nativeBackend){
    if(Number.isFinite(state.crushSampleRate))nativeRate=state.crushSampleRate;
    const firstPower=awaitingNativePower&&Number.isFinite(state.enabled);
    if(!firstPower&&Number.isFinite(state.enabled))setEnginePower(state.enabled>=.5);
-   if(!dragging&&Number.isFinite(state.x)&&Number.isFinite(state.y))setXY(state.x,state.y,true,1/20);
+   if(!dragging){const accept=id=>!nativeTouches.has(id)&&Number.isFinite(state[id])&&(!Number.isFinite(state.xyWriteAck)||state.xyWriteAck>=xyPendingWrites[id]),x=accept('x'),y=accept('y');if(x||y)setXY(x?state.x:xyParameterValues.x,y?state.y:xyParameterValues.y,true,1/20);}
    for(const id of ['mutate','drive'])if(!nativeTouches.has(id)&&Number.isFinite(state[id]))$(id).value=state[id];
    if(Number.isInteger(state.editorSize))$('uiSize').selectedIndex=state.editorSize;
    if(!regionTouch&&Number.isFinite(state.regionStart)&&Number.isFinite(state.regionEnd)){regionLo=Math.min(state.regionStart,state.regionEnd);regionHi=Math.max(regionLo+.01,state.regionEnd);}

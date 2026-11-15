@@ -62,6 +62,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
         if(id=="dnaSpeed"&&bool(event["rhythmic"]))processor.setDnaRhythmValue(static_cast<float>(event["value"]));
         else if (id == "x" || id == "y" || id == "mutate" || id == "drive" || id == "mode" || id == "enabled" || id == "regionStart" || id == "regionEnd" || id == "dnaSpeed" || id=="dnaPitch")
             processor.setParameterValue(id, static_cast<float>(event["value"]));
+        if ((id=="x"||id=="y") && event.hasProperty("xyWrite")) xyWriteAck=static_cast<int>(event["xyWrite"]);
     }
     else if (type == "gesture") processor.parameterGesture(event["id"].toString(), static_cast<bool>(event["start"]));
     else if(type=="preset")
@@ -92,7 +93,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;waveformSent=false;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;waveformSent=false;xyWriteAck=0;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
     else if (type == "visualReady")
     {
         // The page has installed its listener AND applied its first power/state
@@ -138,6 +139,7 @@ void WubrotEditor::timerCallback()
     const auto revision=processor.presetLibraryRevision();
     if(lastCatalogueRevision!=revision){browser->emitEventIfBrowserIsVisible("wubrotPresetLibrary",processor.presetCatalogue());lastCatalogueRevision=revision;}
     auto state = processor.uiState(false);
+    state.getDynamicObject()->setProperty("xyWriteAck",xyWriteAck);
     state.getDynamicObject()->removeProperty("playhead");
     const auto json = juce::JSON::toString(state, true);
     if (lastState != json)
@@ -147,6 +149,7 @@ void WubrotEditor::timerCallback()
         if (!waveformSent || lastWaveformRevision != waveRevision)
         {
             state = processor.uiState(true);
+            state.getDynamicObject()->setProperty("xyWriteAck",xyWriteAck);
             lastWaveformRevision = state["waveformRevision"].toString();
             waveformSent = true;
         }

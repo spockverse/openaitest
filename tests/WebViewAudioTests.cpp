@@ -25,7 +25,7 @@ private:
     }
     void finish(const juce::String& error={})
     {
-        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("mutateBridge",mutateBridgeValues);report->setProperty("latest",lastMetrics);report->setProperty("presetSwitching",presetMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
+        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("mutateBridge",mutateBridgeValues);report->setProperty("latest",lastMetrics);report->setProperty("presetSwitching",presetMetrics);report->setProperty("xyCoordinates",xyMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
         stopTimer();if(error.isEmpty()){std::cout<<"PASS: actual processBlock -> native timer -> JUCE WebView2 -> live shader/canvas; low/mid hits, silence, power, unchanged XY and actual preset SAVE/DISCARD/CANCEL/failed-load switching\n";result=0;}else std::cerr<<"FAIL: "<<error<<" last evaluation: "<<lastError<<" native ready="<<editor.visualBridgeReady<<" forwarded="<<editor.lastAudioLevel<<" seq="<<editor.lastAudioSequence<<" ticks="<<editor.uiTicks<<" frontend="<<juce::JSON::toString(lastMetrics,true)<<'\n';
         juce::MessageManager::getInstance()->stopDispatchLoop();
     }
@@ -59,7 +59,32 @@ private:
               })().catch(error=>{probe.error=String(error);probe.done=true;});
               return JSON.stringify({started:true});
             })())JS",[this](juce::var){presetProbeStarted=true;});
-        }else evaluate("JSON.stringify(window.__presetProbe)",[this](juce::var v){presetMetrics=v;if(!bool(v["done"]))return;if(v["error"].toString().isNotEmpty())finish(v["error"].toString());else if(processor.getCurrentProgram()!=1||std::abs(processor.parameters.getRawParameterValue("drive")->load()-4)>.001f||processor.hasUnsavedPresetChanges())finish("Preset DOM/native processor state diverged");else finish();});
+        }else evaluate("JSON.stringify(window.__presetProbe)",[this](juce::var v){presetMetrics=v;if(!bool(v["done"]))return;if(v["error"].toString().isNotEmpty())finish(v["error"].toString());else if(processor.getCurrentProgram()!=1||std::abs(processor.parameters.getRawParameterValue("drive")->load()-4)>.001f||processor.hasUnsavedPresetChanges())finish("Preset DOM/native processor state diverged");else presetFinished=true;});
+    }
+    void checkXYControls(double now)
+    {
+        static constexpr float positions[][2]{{.5f,-.2f},{-.4f,-.2f},{-.4f,.6f},{.3f,-.4f},{1,1},{.3f,-.4f},{-.2f,.3f},{.3f,-.4f},{.2f,-.6f},{.3f,-.4f}};
+        if(!xySent){
+            xySent=true;
+            if(xyStage==0||xyStage==9){
+                evaluate("(()=>{for(const [id,value] of [['xyX','"+juce::String(xyStage==0?75:65)+"'],['xyY','"+juce::String(xyStage==0?60:70)+"']]){const e=document.getElementById(id);e.focus();e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));}return JSON.stringify({ok:true});})()",[](juce::var){});return;
+            }
+            if(xyStage==5){if(processor.loadUserPreset("XY Recall.wubpreset").failed()){finish("XY preset recall failed");return;}}
+            else if(xyStage==7){processor.deleteUserPreset("XY Recall.wubpreset");processor.setStateInformation(xyProject.getData(),int(xyProject.getSize()));}
+            else{if(xyStage==8)processor.setParameterValue("enabled",0);if(xyStage!=2)processor.setParameterValue("x",positions[xyStage][0]);if(xyStage!=1)processor.setParameterValue("y",positions[xyStage][1]);}
+        }
+        evaluate(R"JS(JSON.stringify({x:px,y:py,readouts:[document.getElementById('xyX').value,document.getElementById('xyY').value],off:!engineIsOn(),frameRequest,glow:getComputedStyle(document.getElementById('xyXTrack'),':after').boxShadow}))JS",[this,now](juce::var v){
+            lastMetrics=v;v.getDynamicObject()->setProperty("xyStage",xyStage);v.getDynamicObject()->setProperty("nativeX",processor.parameters.getRawParameterValue("x")->load());v.getDynamicObject()->setProperty("nativeY",processor.parameters.getRawParameterValue("y")->load());const auto gx=positions[xyStage][0],gy=positions[xyStage][1];const double radius=std::max(1.,std::hypot(double(gx),double(gy)));
+            if(std::abs(processor.parameters.getRawParameterValue("x")->load()-gx)>.0001f||std::abs(processor.parameters.getRawParameterValue("y")->load()-gy)>.0001f||std::abs(double(v["x"])-gx/radius)>.00001||std::abs(double(v["y"])-gy/radius)>.00001)return;
+            if(v["readouts"][0].toString()!=juce::String((1+gx/radius)*50,1)||v["readouts"][1].toString()!=juce::String((1-gy/radius)*50,1))return;
+            if(xyStage==0)xyAck=editor.xyWriteAck;
+            else if(xyStage<=8&&editor.xyWriteAck!=xyAck){finish("Host/project XY updates fed parameters back through WebView");return;}
+            if(xyStage>=8&&(!bool(v["off"])||int(v["frameRequest"])!=0||v["glow"].toString()!="none"))return;
+            xyMetrics.add(v);
+            if(xyStage==3){if(processor.saveUserPreset("XY Recall").failed()){finish("XY preset save failed");return;}processor.getStateInformation(xyProject);}
+            if(++xyStage==10){std::cout<<"PASS actual WebView XY numeric controls -> native parameters, independent/simultaneous host updates, circular projection, preset/project recall and OFF interactivity\n";finish();return;}
+            xySent=false;stageStart=now;
+        });
     }
     void timerCallback() override
     {
@@ -118,7 +143,7 @@ private:
             }
             return;
         }
-        if(visualFinished){checkPresetBrowser();return;}
+        if(visualFinished){if(!presetFinished)checkPresetBrowser();else checkXYControls(now);return;}
         const double durations[]{900,1900,650,1900,650,900,1300};
         evaluate(R"JS(JSON.stringify({...window.__visualProbe,value:audioVisual.value,target:audioVisual.target,off:!engineIsOn(),x:px,y:py,frameRequest,receivedAge:performance.now()-audioVisual.received}))JS",[this,now,duration=durations[stage]](juce::var metrics){
             lastMetrics=metrics;
@@ -137,6 +162,7 @@ private:
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
+    bool presetFinished=false,xySent=false;int xyStage=0,xyAck=0;juce::MemoryBlock xyProject;juce::Array<juce::var> xyMetrics;
     bool visualFinished=false,presetProbeStarted=false;juce::var presetMetrics;
     bool pending=false,installed=false,driveBridgeSent=false,mutateBridgeSent=false;int mutateBridgeStage=0;juce::Array<juce::var> mutateBridgeValues;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
     std::shared_ptr<int> life=std::make_shared<int>(0);

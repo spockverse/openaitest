@@ -30,6 +30,7 @@ private:
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;
     juce::String lastState,lastWaveformRevision;bool waveformSent=false;
+    int xyWriteAck=0; // UI acknowledgement only; never an audio/state parameter.
     int lastCatalogueRevision=-1;
     int uiTicks=0;double lastPlayhead=-1;
     bool audioWasVisible=false;
