@@ -6,6 +6,7 @@ async function checkCoordinates(p){
  const params=async()=>p.evaluate(()=>messages.filter(e=>e.type==='parameter'&&(e.id==='x'||e.id==='y')));
  const gestures=async(id)=>assert.deepEqual(await p.evaluate(id=>messages.filter(e=>e.type==='gesture'&&e.id===id).map(e=>e.start),id),[true,false]);
  await host(0,0);await values('50.0','50.0');assert.equal((await params()).length,0);
+ for(const x of [-1,0,1]){await host(x,0);assert(await p.locator('.xy-coordinate-value').first().evaluate(box=>{const b=box.getBoundingClientRect(),i=box.querySelector('input').getBoundingClientRect(),s=box.querySelector('span').getBoundingClientRect();return Math.abs((i.left+s.right)/2-(b.left+b.right)/2)<.1&&Math.abs((i.top+i.bottom)/2-(s.top+s.bottom)/2)<.1;}),'Complete percentage is not centered');}await host(0,0);
  await edit('x','75.0');await values('75.0','50.0');let changed=await params();assert.equal(changed.length,1);assert.equal(changed[0].id,'x');assert(Math.abs(changed[0].value-.5)<1e-7);await gestures('x');
  await p.evaluate(()=>{messages=[];listeners.wubrotState({x:0,y:0,xyWriteAck:xyWriteSequence-1});});await values('75.0','50.0');assert.equal((await params()).length,0,'Stale native snapshot echoed values back');
  await host(.5,0);await edit('y','60.0');await values('75.0','60.0');changed=await params();assert.equal(changed.length,1);assert.equal(changed[0].id,'y');assert(Math.abs(changed[0].value+.2)<1e-7);await gestures('y');
