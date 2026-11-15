@@ -60,7 +60,7 @@ Resources/
         Samples/dna.wav
 ```
 
-**The three factory WAVs have not been supplied yet.** The directories contain instructions, not substitute audio. Supply each preset's intended WAV at the corresponding `Samples/dna.wav` path. Preset names and settings can be refined when auditioning those samples. Development builds can load your own WAV immediately; factory presets without content report the exact missing sample and preserve the current sound. The intended originals are absent from the reachable Git history, so they have not been replaced with generated or unverified audio.
+**The three factory WAVs have not been supplied yet.** The directories contain instructions, not substitute audio. Supply each preset's intended WAV at the corresponding `Samples/dna.wav` path. Preset names and settings can be refined when auditioning those samples. Development builds can load your own WAV immediately; factory presets without DNA still load their saved parameters, clear previous DNA and report the exact unavailable sample as a nonblocking warning. The intended originals are absent from the reachable Git history, so they have not been replaced with generated or unverified audio.
 
 Installer work is deferred. The current delivery is a portable VST3 ZIP, with bundled factory manifests validated by CI. Check content with:
 

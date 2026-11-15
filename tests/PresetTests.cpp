@@ -55,6 +55,81 @@ static std::vector<float> render(WubrotProcessor &p, bool midi = false)
     }
     return out;
 }
+static juce::var command(WubrotProcessor& p,const juce::String& json)
+{
+    p.presetCommand(juce::JSON::parse(json));
+    for(int i=0;i<15000&&p.isPresetBusy();++i)juce::Thread::sleep(2);
+    require(!p.isPresetBusy(),"Preset command left the processor busy");
+    return p.uiState()["presets"]["result"];
+}
+static void checkFactorySwitching(const juce::File& docs)
+{
+    WubrotProcessor p(docs.getChildFile("Factory Test Documents"));
+    const auto originalContent=juce::SystemStats::getEnvironmentVariable("WUBROT_CONTENT_DIR",{});
+    const auto content=docs.getChildFile("Temporary Factory Fixtures");
+    const char* folders[]{"01 Riddim Monster","02 Liquid Glass","03 Metal Teeth"};
+    const char* names[]{"RIDDIM MONSTER","LIQUID GLASS","METAL TEETH"};
+    juce::String manifests[3];
+    for(int i=0;i<3;++i){
+        const auto folder=content.getChildFile("Presets/Factory").getChildFile(folders[i]);folder.getChildFile("Samples").createDirectory();
+        manifests[i]=juce::File(originalContent).getChildFile("Presets/Factory").getChildFile(folders[i]).getChildFile("preset.json").loadFileAsString();
+        require(manifests[i].isNotEmpty()&&folder.getChildFile("preset.json").replaceWithData(manifests[i].toRawUTF8(),manifests[i].getNumBytesAsUTF8()),"Factory manifest fixture failed");
+    }
+   #if JUCE_WINDOWS
+    _putenv_s("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8());
+   #else
+    setenv("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8(),1);
+   #endif
+    auto expect=[&](int i,bool missing=true){
+        const auto state=p.uiState();const float drives[]{12,4,20},mutates[]{80,55,90},xs[]{.3f,-.45f,.65f},ys[]{-.2f,.25f,-.45f};
+        require(p.getCurrentProgram()==i&&state["presets"]["name"].toString()==names[i]&&state["presets"]["kind"].toString()=="factory"&&state["presets"]["file"].toString().isEmpty(),"Factory identity/UI desynchronized");
+        require(std::abs(float(state["drive"])-drives[i])<1e-5f&&std::abs(float(state["mutate"])-mutates[i])<1e-5f&&std::abs(float(state["x"])-xs[i])<1e-5f&&std::abs(float(state["y"])-ys[i])<1e-5f,"Factory parameters not restored");
+        require(float(state["mix"])==100&&float(state["output"])==-6&&float(state["protect"])==1&&float(state["enabled"])==1&&float(state["regionStart"])==0&&float(state["regionEnd"])==1&&float(state["dnaSpeed"])==2&&float(state["dnaPitch"])==0,"Factory fallback parameters changed");
+        require(int(state["xyMapping"])==1&&!bool(state["dnaSync"])&&!p.hasUnsavedPresetChanges(),"Factory legacy processing or clean baseline changed");
+        if(missing)require(state["name"].toString().isEmpty()&&state["waveform"].size()==0&&!bool(state["editable"])&&!bool(state["analysisOnly"]),"Missing factory DNA retained previous sample/analysis");
+    };
+    p.loadSampleBytes(fixture(),"previous-user-dna.wav");wait(p);
+    for(int i=0;i<3;++i){
+        juce::String error,warning;require(p.loadFactoryPreset(i,&error,&warning)&&error.isEmpty()&&warning.contains(juce::String(folders[i])+"/Samples/dna.wav"),"Missing factory WAV blocked valid parameter loading");expect(i);
+        require(p.uiState()["status"].toString()==warning,"Missing DNA warning was not visible");
+        const auto audio=render(p);juce::MemoryBlock project;p.getStateInformation(project);WubrotProcessor recalled(docs);recalled.setStateInformation(project.getData(),int(project.getSize()));
+        require(recalled.uiState()["presets"]["name"].toString()==names[i]&&!recalled.hasUnsavedPresetChanges()&&recalled.uiState()["waveform"].size()==0&&render(recalled)==audio,"Factory parameter-only project recall changed sound/state");
+    }
+    p.setParameterValue("drive",23);juce::MemoryBlock edited;p.getStateInformation(edited);
+    auto r=command(p,R"({"operation":"factory","index":1,"requestId":31})");
+    require(!bool(r["ok"])&&bool(r["needsUnsaved"])&&int(r["request"]["index"])==1&&int(r["request"]["requestId"])==31,"Unsaved factory switch lost pending identifier");
+    juce::MemoryBlock canceled;p.getStateInformation(canceled);require(canceled==edited,"Unconfirmed/canceled factory switch changed current sound");
+    r=command(p,R"({"operation":"factory","index":1,"requestId":32,"discardConfirmed":true})");
+    require(bool(r["ok"])&&!bool(r["needsUnsaved"])&&r["warning"].toString().contains("02 Liquid Glass/Samples/dna.wav")&&r["message"]==r["warning"],"DISCARD failed or lost nonblocking missing-DNA warning");expect(1);
+    p.setParameterValue("drive",11);require(bool(command(p,R"({"operation":"save","name":"Edited Factory"})")["ok"]),"Factory edits could not Save As a user preset");
+    require(p.uiState()["presets"]["kind"].toString()=="user"&&p.userPresetDirectory().getChildFile("Edited Factory.wubpreset").existsAsFile(),"Factory Save As did not create user preset");
+    require(bool(command(p,R"({"operation":"factory","index":0})")["ok"]),"Save As did not allow subsequent factory load");expect(0);
+    require(bool(command(p,R"({"operation":"load","file":"Edited Factory.wubpreset"})")["ok"])&&float(p.uiState()["drive"])==11,"Factory-to-user restoration failed");
+    p.setParameterValue("drive",22);require(bool(command(p,R"({"operation":"save","name":"Edited Factory","overwrite":true})")["ok"])&&!p.hasUnsavedPresetChanges(),"Saving current user edits failed");
+    require(bool(command(p,R"({"operation":"factory","index":2})")["ok"]),"Save did not allow factory load");expect(2);
+    require(bool(command(p,R"({"operation":"load","file":"Edited Factory.wubpreset"})")["ok"])&&float(p.uiState()["drive"])==22,"Saved user edits were not recalled");
+    juce::MemoryBlock beforeFailure;p.getStateInformation(beforeFailure);
+    r=command(p,R"({"operation":"load","file":"Missing.wubpreset"})");require(!bool(r["ok"])&&!bool(r["needsUnsaved"]),"Missing user preset was reported loaded");
+    juce::MemoryBlock afterFailure;p.getStateInformation(afterFailure);require(beforeFailure==afterFailure,"Failed user load desynchronized current preset");
+    const auto badManifest=content.getChildFile("Presets/Factory/02 Liquid Glass/preset.json");badManifest.replaceWithText("{broken");
+    require(!bool(command(p,R"({"operation":"factory","index":1})")["ok"]),"Corrupt factory manifest was reported loaded");p.getStateInformation(afterFailure);require(beforeFailure==afterFailure,"Invalid factory manifest changed current sound");badManifest.replaceWithData(manifests[1].toRawUTF8(),manifests[1].getNumBytesAsUTF8());
+    for(int i=0;i<30;++i)p.presetCommand(juce::JSON::parse("{\"operation\":\"factory\",\"index\":"+juce::String(i%3)+",\"requestId\":"+juce::String(100+i)+"}"));
+    for(int i=0;i<15000&&p.isPresetBusy();++i)juce::Thread::sleep(2);require(!p.isPresetBusy(),"Rapid factory selection remained blocked");
+    r=p.uiState()["presets"]["result"];require(bool(r["ok"])&&int(r["request"]["requestId"])==129,"Rapid selections lost the final request");expect(2);
+    // Assets exist only in temporary synthetic test fixtures, never in the bundle.
+    for(int i=0;i<3;++i){
+        const auto folder=content.getChildFile("Presets/Factory").getChildFile(folders[i]);require(folder.getChildFile("preset.json").loadFileAsString()==manifests[i],"Factory preset was overwritten");
+        const auto bytes=fixture();require(folder.getChildFile("Samples/dna.wav").replaceWithData(bytes.getData(),bytes.getSize()),"Synthetic WAV fixture failed");
+        juce::String error,warning;require(p.loadFactoryPreset(i,&error,&warning)&&error.isEmpty()&&warning.isEmpty(),"Available factory WAV failed to load");wait(p);expect(i,false);require(p.uiState()["name"].toString()=="dna.wav","Available factory DNA missing");
+    }
+   #if JUCE_WINDOWS
+    _putenv_s("WUBROT_CONTENT_DIR",originalContent.toRawUTF8());
+   #else
+    setenv("WUBROT_CONTENT_DIR",originalContent.toRawUTF8(),1);
+   #endif
+    std::cout<<"PASS factory switching with/without WAV, warning, DISCARD, Save/As, failure recovery, rapid requests and project recall\n";
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -72,46 +147,7 @@ int main()
              {"../Escape", "C:\\bad", "CON", "NUL.txt", "COM1", "bad.", " leading", "trailing ", "a|b", ""})
             require(PresetLibrary::validName(n).failed(), "unsafe name accepted");
         require(PresetLibrary::validName("Metallic Yoi").wasOk(), "valid name rejected");
-        {
-            WubrotProcessor factory(docs.getChildFile("Factory Test Documents"));
-            const auto originalContent=juce::SystemStats::getEnvironmentVariable("WUBROT_CONTENT_DIR",{});
-            const auto content=docs.getChildFile("Temporary Synthetic Factory Fixtures");
-            const char* folders[]{"01 Riddim Monster","02 Liquid Glass","03 Metal Teeth"};
-           #if JUCE_WINDOWS
-            _putenv_s("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8());
-           #else
-            setenv("WUBROT_CONTENT_DIR",content.getFullPathName().toRawUTF8(),1);
-           #endif
-            for(int i=0;i<3;++i){
-                const auto folder=content.getChildFile("Presets/Factory").getChildFile(folders[i]);folder.getChildFile("Samples").createDirectory();
-                require(juce::File(originalContent).getChildFile("Presets/Factory").getChildFile(folders[i]).getChildFile("preset.json").copyFileTo(folder.getChildFile("preset.json")),"Factory manifest fixture copy failed");
-                juce::String error;require(!factory.loadFactoryPreset(i,&error)&&error.contains(juce::String(folders[i])+"/Samples/dna.wav"),"Missing factory asset should fail explicitly");
-                require(factory.uiState()["name"].toString().isEmpty()&&!factory.hasUnsavedPresetChanges(),"Missing factory asset claimed loaded DNA or changed INIT");
-                const auto bytes=fixture();require(folder.getChildFile("Samples/dna.wav").replaceWithData(bytes.getData(),bytes.getSize()),"Temporary synthetic factory fixture failed");
-            }
-            const float drives[]{12, 4, 20}, mutates[]{80, 55, 90}, xs[]{.3f, -.45f, .65f};
-            for (int i = 0; i < 3; ++i)
-            {
-                require(factory.loadFactoryPreset(i),"Factory fixture could not load");
-                wait(factory);
-                require(factory.getCurrentProgram() == i, "factory selection not retained");
-                require(std::abs(factory.parameters.getRawParameterValue("drive")->load() - drives[i]) <
-                                1e-5f &&
-                            std::abs(factory.parameters.getRawParameterValue("mutate")->load() - mutates[i]) <
-                                1e-5f &&
-                            std::abs(factory.parameters.getRawParameterValue("x")->load() - xs[i]) < 1e-5f,
-                        "factory settings changed");
-                require(!factory.hasUnsavedPresetChanges(), "fresh factory preset is dirty");
-            }
-            factory.setParameterValue("drive", 22);
-            require(factory.saveUserPreset("Modified Factory").wasOk(),
-                    "modified factory cannot save as user preset");
-           #if JUCE_WINDOWS
-            _putenv_s("WUBROT_CONTENT_DIR",originalContent.toRawUTF8());
-           #else
-            setenv("WUBROT_CONTENT_DIR",originalContent.toRawUTF8(),1);
-           #endif
-        }
+        checkFactorySwitching(docs);
         WubrotProcessor p(docs);
         p.setParameterValue("x",.5f);p.setParameterValue("y",-.4f);
         p.loadSampleBytes(fixture(), "synthetic-regions.wav");

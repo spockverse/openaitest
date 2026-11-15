@@ -270,6 +270,7 @@ void WubrotProcessor::presetCommand(const juce::var &event)
                        file = event["file"].toString();
             const bool overwrite = static_cast<bool>(event["overwrite"]);
             juce::Result result = juce::Result::ok();
+            juce::String warning;
             const bool needsUnsaved = (op == "load" || op == "factory") && hasUnsavedPresetChanges() &&
                                       !static_cast<bool>(event["discardConfirmed"]);
             if (needsUnsaved)
@@ -290,9 +291,8 @@ void WubrotProcessor::presetCommand(const juce::var &event)
                 else
                 {
                     juce::String error;
-                    loadFactoryPreset(index, &error);
-                    if (error.isNotEmpty())
-                        result = juce::Result::fail(error);
+                    if (!loadFactoryPreset(index, &error, &warning))
+                        result = juce::Result::fail(error.isNotEmpty()?error:"Factory preset could not be loaded.");
                     for (int i = 0; i < 15000 && loading.load() && !stopping.load(); ++i)
                         juce::Thread::sleep(2);
                 }
@@ -321,6 +321,7 @@ void WubrotProcessor::presetCommand(const juce::var &event)
             response->setProperty("operation", op);
             response->setProperty("ok", result.wasOk());
             response->setProperty("conflict", result.getErrorMessage().containsIgnoreCase("already exists"));
+            response->setProperty("warning", warning);
             const juce::String success = op == "save"                      ? "Preset saved."
                                          : op == "load" || op == "factory" ? "Preset loaded."
                                          : op == "rename"                  ? "Preset renamed."
@@ -329,7 +330,7 @@ void WubrotProcessor::presetCommand(const juce::var &event)
                                          : op == "exportFile" ? "Preset exported."
                                          : op == "openFolder" ? "Opened your Documents preset folder."
                                                               : "";
-            response->setProperty("message", result.wasOk() ? success : result.getErrorMessage());
+            response->setProperty("message", result.wasOk() ? (warning.isNotEmpty()?warning:success) : result.getErrorMessage());
             {
                 const juce::ScopedLock lock(metadataLock);
                 presetResult = response;

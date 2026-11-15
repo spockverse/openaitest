@@ -44,7 +44,7 @@ public:
     std::uint32_t audioVisualSequence() const noexcept { return visualReadout.sequence(); }
     float consumeAudioVisualLevel() noexcept { const auto v=visualReadout.consume(); return values[8]->load() >= .5f ? v : 0; }
     std::atomic<int> editorSize { 1 };
-    bool loadFactoryPreset(int,juce::String* error=nullptr);
+    bool loadFactoryPreset(int,juce::String* error=nullptr,juce::String* warning=nullptr);
     juce::Result saveUserPreset(const juce::String&,bool overwrite=false);
     juce::Result loadUserPreset(const juce::String& filename);
     juce::Result renameUserPreset(const juce::String& filename,const juce::String& name,bool overwrite=false);

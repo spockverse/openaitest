@@ -25,9 +25,41 @@ private:
     }
     void finish(const juce::String& error={})
     {
-        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("mutateBridge",mutateBridgeValues);report->setProperty("latest",lastMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
-        stopTimer();if(error.isEmpty()){std::cout<<"PASS: actual processBlock -> native timer -> JUCE WebView2 -> live shader/canvas; low/mid hits, silence, power and unchanged XY\n";result=0;}else std::cerr<<"FAIL: "<<error<<" last evaluation: "<<lastError<<" native ready="<<editor.visualBridgeReady<<" forwarded="<<editor.lastAudioLevel<<" seq="<<editor.lastAudioSequence<<" ticks="<<editor.uiTicks<<" frontend="<<juce::JSON::toString(lastMetrics,true)<<'\n';
+        if(reportFile!=juce::File()) { auto report=std::make_unique<juce::DynamicObject>();report->setProperty("error",error);report->setProperty("evaluationError",lastError);report->setProperty("nativeReady",editor.visualBridgeReady);report->setProperty("nativeLevel",editor.lastAudioLevel);report->setProperty("phases",records);report->setProperty("driveBridge",driveBridgeValues);report->setProperty("mutateBridge",mutateBridgeValues);report->setProperty("latest",lastMetrics);report->setProperty("presetSwitching",presetMetrics);reportFile.getParentDirectory().createDirectory();reportFile.replaceWithText(juce::JSON::toString(juce::var(report.release()),true)); }
+        stopTimer();if(error.isEmpty()){std::cout<<"PASS: actual processBlock -> native timer -> JUCE WebView2 -> live shader/canvas; low/mid hits, silence, power, unchanged XY and actual preset SAVE/DISCARD/CANCEL/failed-load switching\n";result=0;}else std::cerr<<"FAIL: "<<error<<" last evaluation: "<<lastError<<" native ready="<<editor.visualBridgeReady<<" forwarded="<<editor.lastAudioLevel<<" seq="<<editor.lastAudioSequence<<" ticks="<<editor.uiTicks<<" frontend="<<juce::JSON::toString(lastMetrics,true)<<'\n';
         juce::MessageManager::getInstance()->stopDispatchLoop();
+    }
+    void checkPresetBrowser()
+    {
+        if(!presetProbeStarted){
+            evaluate(R"JS((()=>{
+              window.__presetProbe={done:false,error:'',checks:[]};
+              const probe=window.__presetProbe,names=['RIDDIM MONSTER','LIQUID GLASS','METAL TEETH'],$=id=>document.getElementById(id);
+              window.__JUCE__.backend.addEventListener('wubrotState',s=>window.__presetNativeState=s);
+              const wait=async test=>{const end=performance.now()+7000;while(!test()){if(performance.now()>end)throw Error('Preset UI wait timed out: '+JSON.stringify({name:$('presetName').textContent,busy:$('preset').getAttribute('aria-busy'),dialog:$('presetDialogLayer').hidden?'':$('presetDialogTitle').textContent,native:window.__presetNativeState?.presets}));await new Promise(r=>setTimeout(r,20));}};
+              const assert=(ok,message)=>{if(!ok)throw Error(message);},near=(a,b)=>Math.abs(a-b)<.001;
+              const button=label=>{const b=[...$('presetDialogButtons').children].find(e=>e.textContent===label);assert(b,'Missing dialog action '+label);b.click();};
+              const native=()=>window.__presetNativeState;
+              const settled=async name=>wait(()=>$('presetName').textContent===name&&$('preset').getAttribute('aria-busy')==='false'&&$('presetDialogLayer').hidden&&native()?.presets.name===name&&!native().presets.busy);
+              const tab=async kind=>{if($('preset').getAttribute('aria-expanded')!=='true')$('preset').click();await wait(()=>$('preset').getAttribute('aria-busy')==='false');document.querySelector('[data-tab='+kind+']').click();$('presetSearch').value='';$('presetSearch').dispatchEvent(new Event('input'));};
+              const pick=label=>{const b=[...document.querySelectorAll('.preset-item')].find(e=>e.textContent.endsWith(label));assert(b,'Preset row missing '+label);b.click();};
+              const factory=async i=>{await tab('factory');pick(names[i]);await settled(names[i]);assert(native().preset===i&&native().presets.kind==='factory'&&!native().presets.dirty,'Native factory identity/dirty mismatch');assert(Math.abs(native().drive-[12,4,20][i])<.001,'Factory parameters not loaded');assert(!native().name&&!sampleLoaded&&!regionEditable,'Old DNA remained loaded');assert(native().status.includes('DNA sample unavailable'),'Missing nonblocking DNA warning');};
+              const edit=async(value=23)=>{nativeEvent('gesture',{id:'drive',start:true});$('drive').value=value;$('drive').dispatchEvent(new Event('input',{bubbles:true}));nativeEvent('gesture',{id:'drive',start:false});await wait(()=>native()?.presets.dirty&&Math.abs(native().drive-value)<.001);};
+              const chooseDirty=async(i,decision)=>{await tab('factory');pick(names[i]);await wait(()=>!$('presetDialogLayer').hidden&&$('presetDialogTitle').textContent==='UNSAVED CHANGES');button(decision);};
+              (async()=>{
+                for(let i=0;i<3;++i)await factory(i);probe.checks.push('all factory parameters load without WAVs');
+                await edit();await chooseDirty(1,'Cancel');await settled(names[2]);assert(native().presets.dirty&&near(native().drive,23),'CANCEL changed settings');
+                await chooseDirty(1,'Discard');await settled(names[1]);assert(!native().presets.dirty&&near(native().drive,4),'DISCARD did not switch');probe.checks.push('CANCEL preserves and DISCARD resumes');
+                await edit();await chooseDirty(2,'Save');await wait(()=>!$('presetDialogLayer').hidden&&$('presetDialogTitle').textContent==='SAVE PRESET');$('presetNameInput').value='Native Saved Factory';button('Save preset');await settled(names[2]);probe.checks.push('factory Save As retains pending factory target');
+                await tab('user');pick('Native Saved Factory');await settled('Native Saved Factory');assert(native().presets.kind==='user'&&near(native().drive,23),'Saved factory edits not restored');
+                await edit(22);await chooseDirty(1,'Save');await settled(names[1]);await tab('user');pick('Native Saved Factory');await settled('Native Saved Factory');assert(near(native().drive,22),'User SAVE did not persist edits');probe.checks.push('user SAVE then factory/user recall');
+                await tab('factory');pick(names[2]);await settled(names[2]);await tab('factory');document.querySelectorAll('.preset-item').forEach(e=>e.click());await settled(names[0]);probe.checks.push('rapid selection settles and unblocks');
+                await tab('user');pick('Broken');await wait(()=>$('preset').getAttribute('aria-busy')==='false'&&native()?.presets.result.request.file==='Broken.wubpreset'&&native().presets.result.ok===false);assert($('presetName').textContent===names[0]&&$('presetDialogLayer').hidden,'Failed user load left stale selection/dialog');
+                await factory(1);probe.checks.push('failed load preserves state and next switch works');probe.done=true;
+              })().catch(error=>{probe.error=String(error);probe.done=true;});
+              return JSON.stringify({started:true});
+            })())JS",[this](juce::var){presetProbeStarted=true;});
+        }else evaluate("JSON.stringify(window.__presetProbe)",[this](juce::var v){presetMetrics=v;if(!bool(v["done"]))return;if(v["error"].toString().isNotEmpty())finish(v["error"].toString());else if(processor.getCurrentProgram()!=1||std::abs(processor.parameters.getRawParameterValue("drive")->load()-4)>.001f||processor.hasUnsavedPresetChanges())finish("Preset DOM/native processor state diverged");else finish();});
     }
     void timerCallback() override
     {
@@ -86,6 +118,7 @@ private:
             }
             return;
         }
+        if(visualFinished){checkPresetBrowser();return;}
         const double durations[]{900,1900,650,1900,650,900,1300};
         evaluate(R"JS(JSON.stringify({...window.__visualProbe,value:audioVisual.value,target:audioVisual.target,off:!engineIsOn(),x:px,y:py,frameRequest,receivedAge:performance.now()-audioVisual.received}))JS",[this,now,duration=durations[stage]](juce::var metrics){
             lastMetrics=metrics;
@@ -97,13 +130,14 @@ private:
             if((stage==2||stage==4)&&static_cast<double>(metrics["value"])>.005){finish("Visual envelope failed to decay during silence");return;}
             if(stage==5&&(!static_cast<bool>(metrics["off"])||static_cast<int>(metrics["frameRequest"])!=0)){finish("Power OFF failed to freeze the actual WebView");return;}
             if(std::abs(static_cast<double>(metrics["x"]))>.0001||std::abs(static_cast<double>(metrics["y"]))>.0001){finish("Audio changed XY");return;}
-            if(++stage==7){finish();return;}
+            if(++stage==7){visualFinished=true;return;}
             const auto action=stage==5?"document.getElementById('enginePower').click();":stage==6?"document.getElementById('enginePower').click();":"";
             evaluate(juce::String("(()=>{")+action+"window.__visualProbe={packets:0,received:0,rendered:0,pixelMean:0,geometryMean:0,shaderGain:0,pixelTests:0,frames:0,surges:0,above:false};return JSON.stringify({ok:true});})()",[this](juce::var){input.store(stage==1||stage==5||stage==6?1:stage==3?2:0);stageStart=juce::Time::getMillisecondCounterHiRes();});
         });
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
+    bool visualFinished=false,presetProbeStarted=false;juce::var presetMetrics;
     bool pending=false,installed=false,driveBridgeSent=false,mutateBridgeSent=false;int mutateBridgeStage=0;juce::Array<juce::var> mutateBridgeValues;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;
     std::shared_ptr<int> life=std::make_shared<int>(0);
     juce::File reportFile;juce::Array<juce::var> records;
@@ -111,10 +145,14 @@ private:
 int main(int argc,char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    WubrotProcessor processor;processor.clearSample();processor.prepareToPlay(48000,480);
+    auto docs=juce::File::createTempFile("-WubrotWebViewDocuments");docs.deleteFile();
+    WubrotProcessor processor(docs);processor.clearSample();processor.prepareToPlay(48000,480);
+    processor.userPresetDirectory().createDirectory();
+    if(!processor.userPresetDirectory().getChildFile("Broken.wubpreset").replaceWithText("invalid preset fixture")){std::cerr<<"FAIL: could not create invalid preset fixture\n";return 1;}
+    processor.refreshPresetLibrary();
     std::unique_ptr<juce::AudioProcessorEditor> owned(processor.createEditorIfNeeded());auto* editor=dynamic_cast<WubrotEditor*>(owned.get());
     if(!editor){std::cerr<<"FAIL: no native WebView editor\n";return 1;}
     juce::Component window;window.setBounds(20,20,804,697);window.addAndMakeVisible(*editor);window.addToDesktop(juce::ComponentPeer::windowHasTitleBar);window.setVisible(true);window.toFront(true);
     int result=1;{WubrotWebViewProbe probe(processor,*editor,argc>1?juce::File(argv[1]):juce::File());juce::MessageManager::getInstance()->runDispatchLoop();result=probe.result;}
-    window.removeChildComponent(editor);window.removeFromDesktop();owned.reset();return result;
+    window.removeChildComponent(editor);window.removeFromDesktop();owned.reset();docs.deleteRecursively();return result;
 }

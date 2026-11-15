@@ -227,18 +227,19 @@ juce::File WubrotProcessor::factoryRoot() const
     return juce::File::getSpecialLocation(juce::File::commonApplicationDataDirectory).getChildFile("Spock Audio/WUBROT/Presets/Factory");
 }
 const juce::String WubrotProcessor::getProgramName(int i) { return i >= 0 && i < 3 ? presetNames[i] : ""; }
-bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
+bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error,juce::String* warning)
 {
     if(error)error->clear();
+    if(warning)warning->clear();
     if (index < 0 || index >= 3 || loading.load()) {if(error)*error="Factory preset unavailable while DNA is loading.";return false;}
     const auto folder = factoryRoot().getChildFile(presetFolders[index]);
     const auto manifest = juce::JSON::parse(folder.getChildFile("preset.json"));
     if (!manifest.isObject()) { const juce::String message="Factory preset content is missing or invalid. Replace WUBROT.vst3 with the complete development bundle.";setStatus(message);if(error)*error=message;return false; }
     const auto relative = manifest["sample"].toString();
     const auto file = folder.getChildFile(relative);
-    if (relative.isEmpty() || !file.isAChildOf(folder) || !file.existsAsFile())
+    if (relative.isEmpty() || !file.isAChildOf(folder))
     {
-        const juce::String message="Factory preset unavailable: missing DNA sample "+juce::String(presetFolders[index])+"/"+relative+". Current sound preserved.";
+        const juce::String message="Invalid factory DNA sample path. Current sound preserved.";
         setStatus(message);if(error)*error=message;return false;
     }
     clearSample();
@@ -256,7 +257,14 @@ bool WubrotProcessor::loadFactoryPreset(int index,juce::String* error)
     xyMapping.store(1);dnaSync.store(false); // Factory sounds retain their original mapping/timing.
     currentPreset.store(index);
     {const juce::ScopedLock lock(metadataLock);activePresetName=presetNames[index];activeUserFile.clear();}
-    loadSampleFile(file,true); return true;
+    if(!file.existsAsFile()||!file.hasReadAccess())
+    {
+        const juce::String message="Factory parameters loaded. DNA sample unavailable: "+juce::String(presetFolders[index])+"/"+relative+". Load your own sample to add ROT DNA.";
+        setStatus(message);if(warning)*warning=message;patternPosition.store(0);markPresetClean();
+    }
+    else loadSampleFile(file,true);
+    updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withProgramChanged(true).withNonParameterStateChanged(true));
+    return true;
 }
 void WubrotProcessor::timerCallback()
 {

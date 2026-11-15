@@ -329,12 +329,9 @@ int main()
         require(p.loadFactoryPreset(0), "factory sample could not load from nested preset folder"); waitForSample(p);
         require(p.uiState()["name"].toString() == "dna.wav", "factory preset did not load its sample");
         require(std::abs(p.parameters.getRawParameterValue("mutate")->load() - 88) < .01f, "factory parameters not applied");
-        juce::MemoryBlock beforeMissing;p.getStateInformation(beforeMissing);
-        const auto beforeMissingUi=p.uiState();
-        factory.getChildFile("Samples/dna.wav").deleteFile();juce::String missingError;
-        require(!p.loadFactoryPreset(0,&missingError)&&missingError.contains("01 Riddim Monster/Samples/dna.wav"),"Missing factory asset has no exact diagnostic");
-        require(p.uiState()["name"]==beforeMissingUi["name"]&&p.uiState()["xyMapping"]==beforeMissingUi["xyMapping"]&&p.uiState()["waveform"].size()==128,"Missing factory asset discarded current DNA");
-        juce::MemoryBlock afterMissing;p.getStateInformation(afterMissing);require(beforeMissing==afterMissing,"Missing factory asset changed project/preset state");
+        factory.getChildFile("Samples/dna.wav").deleteFile();juce::String missingError,missingWarning;
+        require(p.loadFactoryPreset(0,&missingError,&missingWarning)&&missingError.isEmpty()&&missingWarning.contains("01 Riddim Monster/Samples/dna.wav"),"Missing factory DNA should warn without blocking settings");
+        require(p.uiState()["name"].toString().isEmpty()&&p.uiState()["waveform"].size()==0&&!bool(p.uiState()["editable"])&&!p.hasUnsavedPresetChanges(),"Parameter-only factory load retained old DNA or stayed dirty");
         folder.deleteRecursively();
         std::cout << "PASS: real WAV decoding, audio modulation, project recall, invalid/silent file recovery, MIDI retrigger, clear-state recall, nested factory preset sample\n";
         return 0;
