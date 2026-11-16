@@ -346,7 +346,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto xml = getXmlFromBinary(data, size);
     if (!xml || !xml->hasTagName("WubrotState")) return;
     auto state = juce::ValueTree::fromXml(*xml);
-    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8"&&state["xyMapping"].toString()!="9"&&state["xyMapping"].toString()!="10"&&state["xyMapping"].toString()!="11")
+    if(state.hasProperty("xyMapping")&&state["xyMapping"].toString()!="1"&&state["xyMapping"].toString()!="2"&&state["xyMapping"].toString()!="3"&&state["xyMapping"].toString()!="4"&&state["xyMapping"].toString()!="5"&&state["xyMapping"].toString()!="6"&&state["xyMapping"].toString()!="7"&&state["xyMapping"].toString()!="8"&&state["xyMapping"].toString()!="9"&&state["xyMapping"].toString()!="10"&&state["xyMapping"].toString()!="11"&&state["xyMapping"].toString()!="12")
     {setStatus("Unsupported XY mapping version. This project needs a newer WUBROT build.");return;}
     if (!state.getChildWithProperty("id", "enabled").isValid())
     {
@@ -408,7 +408,7 @@ void WubrotProcessor::setStateInformation(const void* data, int size)
     const auto full=juce::JSON::parse(state["fullEnvelope"].toString());
     if(auto* array=full.getArray();array&&array->size()==static_cast<int>(DnaProfile::bins))for(std::size_t i=0;i<DnaProfile::bins;++i){const float v=static_cast<float>((*array)[static_cast<int>(i)]);fullEnvelope[i]=std::isfinite(v)?juce::jlimit(0.0f,1.0f,v):0;}
     storedWav.fromBase64Encoding(state["sourceWav"].toString());if(storedWav.getSize()>maxSampleBytes)storedWav.reset();
-    xyMapping.store(juce::jlimit(1,11,static_cast<int>(state.getProperty("xyMapping",1))));
+    xyMapping.store(juce::jlimit(1,12,static_cast<int>(state.getProperty("xyMapping",1))));
     parameters.replaceState(state); profiles.publish(profile);
     dnaSync.store(bool(state.getProperty("dnaSync",xyMapping.load()>=11)));
     presetBaseline=state.getProperty("presetBaseline",soundSignature()).toString();

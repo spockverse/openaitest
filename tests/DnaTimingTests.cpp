@@ -9,7 +9,7 @@ static DnaProfile fixedProfile(float hz=300){auto p=analyse(reference(0));p.spec
 static CrushDSP::Parameters controls(float pitch=0){auto m=XYMapping::map(.4f,-.35f,sr,11);CrushDSP::Parameters p;p.processingVersion=11;p.centered=true;p.signedX=.4;p.signedY=-.35;p.activity=m.activity;p.bits=m.bits;p.rate=m.rate;p.drive=18;p.mutate=1;p.mix=1;p.output=0;p.rhythmic=true;p.regionBeats=1;p.bpm=120;p.pitch=pitch;return p;}
 static void checkInvalidAudio(){
  auto profile=fixedProfile();
- for(int version=1;version<=11;++version)for(int channels:{1,2})for(float mix:{0.f,.5f,1.f})for(bool enabled:{false,true})for(bool center:{false,true}){
+ for(int version=1;version<=12;++version)for(int channels:{1,2})for(float mix:{0.f,.5f,1.f})for(bool enabled:{false,true})for(bool center:{false,true}){
   CrushDSP a,b;a.prepare(sr);b.prepare(sr);auto p=controls();p.processingVersion=version;p.centered=version>=2;p.rhythmic=version>=11;p.mix=mix;p.enabled=enabled;if(center)p.activity=0;
   for(int i=0;i<2048;++i){p.enabled=i<1024?enabled:!enabled;float x[]{.3f*std::sin(i*.031f),-.2f*std::sin(i*.047f)},y[]{x[0],x[1]};
    if(i%173==0){constexpr float invalid[]{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()};x[(i/173)%channels]=invalid[(i/173)%3];y[(i/173)%channels]=0;}

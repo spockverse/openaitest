@@ -52,6 +52,7 @@ public:
         const bool expressiveXY=target.processingVersion>=9;
         const bool deepControls=target.processingVersion>=10;
         const bool dnaRefinement=target.processingVersion>=11;
+        const bool inputResponsive=target.processingVersion>=12;
         // Sanitize before retaining the dry/bypass copy or feeding any state.
         for(int ch=0;ch<std::min(channels,2);++ch)if(!std::isfinite(frame[ch]))frame[ch]=0;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
@@ -150,7 +151,7 @@ public:
                 const float dnaShift=advanced?influence*(std::clamp((modernShape.logPeaks[deepControls?1:0]-6.5510803f)*(deepControls?.65f:1.f),-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
                 const float pitchLog=current.pitch*.057762265f;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+pitchLog,deepControls?0:pitchLog*influence);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+pitchLog,deepControls?0:pitchLog*influence,inputResponsive,brightness,fast);
                 // Reuse the broad tonal bank for continuous XY character and optional DNA.
                 const float right=std::clamp((current.signedX+1)*.5f,0.f,1.f),bottom=std::clamp((current.signedY+1)*.5f,0.f,1.f);
                 const float metal=right*(1-bottom),crunch=(1-right)*(1-bottom),robot=right*bottom;

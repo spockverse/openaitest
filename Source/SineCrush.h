@@ -25,7 +25,7 @@ public:
     void set(float x,float y,float activity,float bits,float rate,float drive,
              float protection,float articulation,int frames,bool enhanced=false,
              float dnaShift=0,float dnaMotion=0,bool correctedRouting=false,bool expressiveRouting=false,
-             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f,float pitchLog=0) noexcept
+             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f,float pitchLog=0,bool inputResponsive=false,float sourceBrightness=.4f,float sourceLevel=.2f) noexcept
     {
         expressive=expressiveRouting;
         deepened=deepControls;
@@ -47,6 +47,9 @@ public:
             depth=std::clamp(depth*(1-.6f*lower*(1-lowerRight))+.22f*crusherDrive*reach,0.f,.95f);
         }
         if(pitchLog!=0)targetFrequency=std::clamp(targetFrequency*std::exp(pitchLog),20.f,1600.f);
+        // Keep the already-crushed source audible between carrier sidebands.
+        // Use the existing smoothed input detector, never a new modulation clock.
+        if(inputResponsive)depth*=.55f+.45f*std::clamp(sourceBrightness,0.f,1.f);
         const float band=std::clamp(600+1000*right+600*articulation+800*dnaMotion,400.f,3200.f);
         const std::array<float,10> goal{targetFrequency,depth,
             1+drive*(2+6*drive),advanced?std::clamp(robot*reach*2,0.f,1.f):robot*activity,
@@ -61,6 +64,16 @@ public:
         // artifacts remain, with only restrained reconstruction at warm positions.
         float effectiveBits=digital?bits:advanced?std::max(3.f,bits-reach*(.9f*crunch+.4f*robot)+.6f*dnaMotion):std::max(4.f,bits);
         float effectiveRate=digital?rate:advanced?rate*std::exp(reach*(-1.1f*robot+.25f*warm)):rate;
+        if(inputResponsive){
+            // Calibrate precision to the live input range: quiet moving harmonics
+            // otherwise round away before they can excite the DNA/filter bank.
+            effectiveBits+=std::clamp(std::log2(1/std::max(.125f,sourceLevel)),0.f,3.f);
+            // Reserve midrange articulation at intermediate XY distances. The
+            // original extreme clock is still available at the circular boundary.
+            // Only clock targets change; the accumulator is never restarted.
+            const float room=1-std::clamp(activity,0.f,1.f)*std::clamp(activity,0.f,1.f);
+            effectiveRate=std::max(effectiveRate,6000*room*(1+std::clamp(sourceBrightness,0.f,1.f)));
+        }
         if(deepControls){
             // DRIVE changes the digital resolution/clock themselves. DNA adds
             // bounded, reference-derived motion to that same continuous clock.
