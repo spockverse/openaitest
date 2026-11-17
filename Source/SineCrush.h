@@ -25,7 +25,7 @@ public:
     void set(float x,float y,float activity,float bits,float rate,float drive,
              float protection,float articulation,int frames,bool enhanced=false,
              float dnaShift=0,float dnaMotion=0,bool correctedRouting=false,bool expressiveRouting=false,
-             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f,float pitchLog=0,bool inputResponsive=false,float sourceBrightness=.4f,float sourceLevel=.2f,bool tonalEnhancer=false) noexcept
+             bool deepControls=false,float crusherDrive=0,float mutation=0,float referenceLogFrequency=6.2146081f,float pitchLog=0,bool inputResponsive=false,float sourceBrightness=.4f,float sourceLevel=.2f,bool tonalEnhancer=false,bool strongerPresence=false) noexcept
     {
         enhancing=tonalEnhancer;
         expressive=expressiveRouting;
@@ -35,6 +35,10 @@ public:
         advanced=enhanced;digital=correctedRouting;
         lowK=digital?correctedLowK:legacyLowK;
         const float crunch=(1-right)*(1-bottom),reach=std::sqrt(std::clamp(activity,0.f,1.f));
+        // Expand only the upper DRIVE range. The approved lower half retains
+        // its exact depth and waveform; the extra curve has zero end slopes.
+        const float upperDrive=std::clamp(2*crusherDrive-1,0.f,1.f);
+        const float presence=enhancing&&strongerPresence?upperDrive*upperDrive*(3-2*upperDrive):0;
         float targetFrequency=advanced
             ? std::clamp((33+740*metal*metal+180*robot+(expressive?395.f:95.f)*crunch)*(1+.3f*articulation)*std::exp(.65f*dnaShift),20.f,1600.f)
             : std::clamp((47+330*metal+85*robot)*(1+.1f*articulation),20.f,1600.f);
@@ -59,18 +63,18 @@ public:
             const float position=std::clamp(x,-1.f,1.f),logAnchor=std::log(anchor);
             const float logRange=position<0?logAnchor-std::log(20.f):std::log(maximum)-logAnchor;
             targetFrequency=std::clamp(std::exp(logAnchor+position*logRange+pitchLog),20.f,maximum);
-            depth=reach*(.12f+.65f*std::clamp(crusherDrive,0.f,1.f));
+            depth=reach*(.12f+.65f*std::clamp(crusherDrive,0.f,1.f)+.18f*presence);
         }
         const float band=std::clamp(600+1000*right+600*articulation+800*dnaMotion,400.f,3200.f);
         // In the enhancer, the existing complementary path adds a bounded
         // digital error to the source instead of amplifying the held artifacts.
         const std::array<float,10> goal{targetFrequency,depth,
             1+drive*(2+6*drive),enhancing?std::clamp(y,-1.f,1.f):advanced?std::clamp(robot*reach*2,0.f,1.f):robot*activity,
-            1/std::sqrt(1+drive*(2+6*drive)),std::clamp(protection,0.f,1.f),
+            enhancing?.75f+.25f*presence:1/std::sqrt(1+drive*(2+6*drive)),std::clamp(protection,0.f,1.f),
             advanced?1-std::exp(-6.28318530718f*band/float(fs)):0,
             enhancing?0:advanced?std::clamp(reach*(.25f+.75f*metal)+.2f*dnaMotion,0.f,1.f):0,
             enhancing?0:expressive?std::clamp(depth*(.6f*crunch+.55f*robot+.12f*warm)+.15f*crusherDrive*reach,0.f,.8f):0,
-            enhancing?.55f+.2f*crusherDrive:deepControls?1+reach*(.5f*crusherDrive+1.5f*crusherDrive*crusherDrive):1};
+            enhancing?.55f+.2f*crusherDrive+.05f*presence:deepControls?1+reach*(.5f*crusherDrive+1.5f*crusherDrive*crusherDrive):1};
         if(!primed){control=goal;primed=true;}
         for(std::size_t i=0;i<goal.size();++i)step[i]=(goal[i]-control[i])/float(std::max(1,frames));
         // Keep a finite quantizer range on filtered inputs; intentional clock
@@ -110,7 +114,7 @@ public:
             const float rounded=.6f*carrier+.4f*carrier*carrier*carrier;
             const float stepped=std::round(carrier*3)/3;
             carrier+=std::max(0.f,-control[3])*(rounded-carrier)
-                    +.75f*std::max(0.f,control[3])*(stepped-carrier);
+                    +control[4]*std::max(0.f,control[3])*(stepped-carrier);
         }else carrier+=control[3]*(std::round(carrier*3)/3-carrier);
         std::array<float,2> dry{},body{};
         for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);dry[c]=original?original[ch]:frame[ch];

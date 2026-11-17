@@ -103,7 +103,7 @@ juce::Result PresetLibrary::validateParameters(const juce::ValueTree &s)
     if(s.hasProperty("xyMapping"))
     {
         double version=0;
-        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7&&version!=8&&version!=9&&version!=10&&version!=11&&version!=12&&version!=13))
+        if(!number(s["xyMapping"],version)||(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7&&version!=8&&version!=9&&version!=10&&version!=11&&version!=12&&version!=13&&version!=14))
             return juce::Result::fail("Unsupported XY mapping version. Update WUBROT to load this preset.");
     }
     struct Bound

@@ -105,13 +105,15 @@ int main(int argc, char **argv)
         std::filesystem::create_directories(dir);
         const juce::String label = argc > 2 ? argv[2] : "current";
         const bool ui = argc > 3 && std::string(argv[3]) == "ui";
-        const int model=argc>4?std::stoi(argv[4]):13;
-        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7&&model!=8&&model!=9&&model!=10&&model!=11&&model!=12&&model!=13)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 or 13");
+        const int model=argc>4?std::stoi(argv[4]):14;
+        if(model!=3&&model!=4&&model!=5&&model!=6&&model!=7&&model!=8&&model!=9&&model!=10&&model!=11&&model!=12&&model!=13&&model!=14)throw std::runtime_error("Benchmark model must be 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 or 14");
+        const float benchmarkDrive=argc>6?std::stof(argv[6]):12.f;
+        if(!std::isfinite(benchmarkDrive)||benchmarkDrive<0||benchmarkDrive>36)throw std::runtime_error("Benchmark DRIVE must be 0-36");
         std::ofstream report(dir / (label.toStdString() + "-callback.json"));
         report << "{\"label\":\"" << label << "\",\"cpu\":\"" << juce::SystemStats::getCpuVendor() << " "
                << juce::SystemStats::getCpuModel() << "\",\"logicalCpus\":" << juce::SystemStats::getNumCpus()
                << ",\"os\":\"" << juce::SystemStats::getOperatingSystemName()
-               << "\",\"processingModel\":" << model << ",\"editorOpen\":" << (ui ? "true" : "false") << ",\"cases\":[";
+               << "\",\"processingModel\":" << model << ",\"drive\":" << benchmarkDrive << ",\"editorOpen\":" << (ui ? "true" : "false") << ",\"cases\":[";
         bool first = true;
         double worstPeak = 0;
         WubrotProcessor p;
@@ -123,7 +125,7 @@ int main(int argc, char **argv)
         if(model<11)p.setParameterValue("dnaSpeed",2);
         p.setParameterValue("x", .55f);
         p.setParameterValue("y", -.45f);
-        p.setParameterValue("drive", 12);
+        p.setParameterValue("drive", benchmarkDrive);
         p.setParameterValue("mutate", 100);
         p.loadSampleBytes(donor(), "synthetic-benchmark.wav");
         for (int i = 0; i < 10000 && p.isLoading(); ++i)

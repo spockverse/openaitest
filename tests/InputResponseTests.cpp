@@ -1,5 +1,5 @@
 #include "ControlFixtures.h"
-#include "fixtures/v061/CrushDSP.h"
+#include "fixtures/v062/CrushDSP.h"
 #include <complex>
 
 // Synthetic, amplitude-stable sources: static LP bass, moving LP bass, moving
@@ -57,7 +57,7 @@ struct DigitalRoutingProbe {
     static float frequency(const CrushDSP& a){return a.sineCrush.control[0];}
     static float shape(const CrushDSP& a){return a.sineCrush.control[3];}
     static float excitation(const CrushDSP& a){return a.excitationControl[3];}
-    static void sameDna(const CrushDSP& a,const Legacy061CrushDSP& b){
+    static void sameDna(const CrushDSP& a,const Legacy062CrushDSP& b){
         // Compare descriptor targets, not the filter's evolving input history
         // or the first ramp's initialization under different core bit depths.
         require(a.tonal.modernGoal==b.tonal.modernGoal,"DNA spectral targets changed");
@@ -91,8 +91,8 @@ static void enhancerChecks(const std::array<std::vector<float>,4>& inputs,const 
     require(spectralDistance(a,b)>.05,"DNA references no longer shape the tone");
     // Incoming-audio detectors, descriptor coefficients, timing, and MUTATE's
     // DNA excitation remain identical; only the core crush/DRIVE are retuned.
-    CrushDSP now;Legacy061CrushDSP old;now.prepare(sr);old.prepare(sr);
-    CrushDSP::Parameters p;Legacy061CrushDSP::Parameters q;
+    CrushDSP now;Legacy062CrushDSP old;now.prepare(sr);old.prepare(sr);
+    CrushDSP::Parameters p;Legacy062CrushDSP::Parameters q;
     p.processingVersion=13;q.processingVersion=12;p.centered=q.centered=true;p.rhythmic=q.rhythmic=true;
     p.signedX=q.signedX=.4f;p.signedY=q.signedY=-.4f;p.mutate=q.mutate=1;p.drive=q.drive=0;p.mix=q.mix=1;p.output=q.output=0;
     const auto n=XYMapping::map(.4f,-.4f,sr,13),o=XYMapping::map(.4f,-.4f,sr,12);
@@ -143,10 +143,48 @@ static void modulationChecks(const DnaProfile& dna){
         for(int i=0;i<sr;++i){p.signedX=std::sin(i*.01f);p.signedY=std::cos(i*.007f);float f[2]{};d.processFrame(f,2,p,&dna);require(f[0]==0&&f[1]==0,"Carrier becomes an independent audible tone in silence");}}
     std::cout<<"PASS actual 600 Hz carrier/1000 Hz excitation creates 400/1600 Hz sidebands, DRIVE depth, independent X/Y, full-MUTATE tuning and silence.\n";
 }
+static void presenceChecks(const std::array<std::vector<float>,4>& inputs,const DnaProfile& dna){
+    // Lower DRIVE retains every approved sweet spot, with and without DNA.
+    for(int k=0;k<4;++k)for(float y:{-.4f,.4f})for(float drive:{0.f,9.f,18.f})
+        for(const DnaProfile* profile:{static_cast<const DnaProfile*>(nullptr),&dna})
+            require(render(inputs[k],.4f,y,profile,1,1,13,drive)==render(inputs[k],.4f,y,profile,1,1,14,drive),"Lower DRIVE range changed from approved v062");
+    std::array<std::vector<float>,2> tones;
+    std::array<float,2> frequency{};
+    for(int i=0;i<2;++i){CrushDSP d;d.prepare(sr);CrushDSP::Parameters p;
+        p.processingVersion=13+i;p.centered=true;p.signedX=std::log(2.f)/std::log(20.f);p.signedY=.6f;
+        p.activity=std::hypot(p.signedX,p.signedY);p.bits=16;p.rate=sr;p.drive=36;p.mutate=0;p.mix=1;p.output=0;
+        for(int n=0;n<sr*2;++n){float f[]{.1f*std::sin(6.28318530718f*1000*n/sr),0};d.processFrame(f,1,p);if(n>=sr)tones[i].push_back(f[0]);}
+        frequency[i]=DigitalRoutingProbe::frequency(d);
+        require(DigitalRoutingProbe::excitation(d)==0,"Presence update adds generic saturation");}
+    require(frequency[0]==frequency[1],"Presence boost retunes the approved carrier");
+    const double fundamental=magnitude(tones[1],1000)/magnitude(tones[0],1000);
+    require(fundamental>.98&&fundamental<1.02,"Presence is just a dry/output gain increase");
+    const auto a=match(tones[0]),b=match(tones[1]);
+    const double sidebands=(magnitude(b,400)+magnitude(b,1600))/(magnitude(a,400)+magnitude(a,1600));
+    const double stepped=magnitude(b,4000)/magnitude(a,4000);
+    require(sidebands>1.25&&sidebands<1.45,"Upper DRIVE modulation increase is outside the restrained target");
+    require(stepped>1.5&&stepped<2,"Stepped texture increase is missing or excessive");
+    require(render(inputs[2],0,0,&dna,1,1,14,36)==inputs[2],"Presence changes dry centre");
+    for(int k=0;k<4;++k)for(auto xy:{std::array<float,2>{-.7f,-.7f},{.7f,-.7f},{-.7f,.7f},{.7f,.7f},{0,1},{1,0}}){
+        const auto out=render(inputs[k],xy[0],xy[1],nullptr,0,1,14,36);
+        require(magnitude(out,55)>.94*magnitude(inputs[k],55),"Extra core texture loses bass fundamentals");
+        if(k==1||k==2)require(correlation(sourceMotion(inputs[k]).ratio,sourceMotion(out).ratio)>.75,"Extra texture obscures source filter/formant movement");
+        if(k==3)require(correlation(motion(inputs[k]).energy,motion(out).energy)>.98,"Extra texture obscures attacks");}
+    for(auto xy:{std::array<float,2>{-.7f,-.7f},{.7f,-.7f},{-.7f,.7f},{.7f,.7f},{0,1},{1,0}})
+        for(const DnaProfile* profile:{static_cast<const DnaProfile*>(nullptr),&dna}){
+            auto input=inputs[3];for(auto& v:input)v*=3;
+            const auto out=render(input,xy[0],xy[1],profile,1,1,14,36);
+            for(float v:out)require(std::isfinite(v)&&std::abs(v)<=1,"New upper DRIVE causes output clipping/instability");
+            // A full DNA profile deliberately changes spectral balance. At
+            // overload, compare against that same approved transformation.
+            const auto baseline=render(input,xy[0],xy[1],profile,1,1,13,36);
+            require(magnitude(out,55)>.85*magnitude(baseline,55),"Extra texture loses bass against approved DNA/overload response");}
+    std::cout<<"Upper DRIVE level-matched sideband lift "<<20*std::log10(sidebands)<<" dB, stepped-partial lift "<<20*std::log10(stepped)<<" dB; fundamental ratio "<<fundamental<<".\n";
+}
 static void legacyRecall(const DnaProfile& dna){
-    for(int version=1;version<=12;++version){
-        CrushDSP now;Legacy061CrushDSP old;now.prepare(sr);old.prepare(sr);
-        CrushDSP::Parameters p;Legacy061CrushDSP::Parameters q;
+    for(int version=1;version<=13;++version){
+        CrushDSP now;Legacy062CrushDSP old;now.prepare(sr);old.prepare(sr);
+        CrushDSP::Parameters p;Legacy062CrushDSP::Parameters q;
         for(int i=0;i<18000;++i){
             if(i%211==0){const float x=.7f*std::sin(i*.0007f),y=.7f*std::cos(i*.0011f);const auto m=XYMapping::map(x,y,sr,version);
                 p.processingVersion=q.processingVersion=version;p.centered=q.centered=version>=2;p.rhythmic=q.rhythmic=version>=11;
@@ -163,6 +201,7 @@ int main(int argc,char**argv){
     auto dna=analyse(reference(0)),contrast=analyse(reference(1));legacyRecall(dna);
     enhancerChecks(inputs,dna,contrast);
     modulationChecks(dna);
+    presenceChecks(inputs,dna);
     for(float x:{-.7f,-.4f,0.f,.4f,.7f})for(float y:{-.7f,-.4f,0.f,.4f,.7f}){
         const auto a=XYMapping::map(x,y,sr,11),b=XYMapping::map(x,y,sr,12);require(a.bits==b.bits&&a.rate==b.rate&&a.activity==b.activity,"XY coordinate mapping changed");}
     std::vector<float> audition;
@@ -198,11 +237,11 @@ int main(int argc,char**argv){
     for(float drive:{18.f,36.f})require(difference(match(render(inputs[1],.4f,-.4f,nullptr,0,1,12)),match(render(inputs[1],.4f,-.4f,nullptr,0,1,12,drive)))>.15,"DRIVE contribution lost");
     require(render(inputs[1],0,0,&dna,1,1,12,36)==inputs[1],"Dry center changed");
     for(double fs:{44100.,48000.,96000.})for(int block:{64,128,512}){
-        CrushDSP d;d.prepare(fs);CrushDSP::Parameters p;p.processingVersion=13;p.centered=p.rhythmic=true;p.mix=1;p.output=0;
-        for(int i=0;i<int(fs/2);++i){if(i%block==0){p.signedX=.95f*std::sin(i*.001f);p.signedY=.95f*std::cos(i*.0017f);const auto m=XYMapping::map(p.signedX,p.signedY,fs,13);p.activity=m.activity;p.bits=m.bits;p.rate=m.rate;p.drive=float(i%37);p.mutate=float(i%101)/100;}
+        CrushDSP d;d.prepare(fs);CrushDSP::Parameters p;p.processingVersion=14;p.centered=p.rhythmic=true;p.mix=1;p.output=0;
+        for(int i=0;i<int(fs/2);++i){if(i%block==0){p.signedX=.95f*std::sin(i*.001f);p.signedY=.95f*std::cos(i*.0017f);const auto m=XYMapping::map(p.signedX,p.signedY,fs,14);p.activity=m.activity;p.bits=m.bits;p.rate=m.rate;p.drive=float(i%37);p.mutate=float(i%101)/100;}
             float f[]{i<fs/4?.7f*std::sin(float(i)*.031f):0,0};d.processFrame(f,2,p,i/2000%2?&dna:nullptr);
             require(std::isfinite(f[0])&&std::abs(f[0])<1.8f&&f[1]==0,"Automation/silence/crosstalk instability");}
     }
     if(argc>1)wav(argv[1],audition);
-    std::cout<<"PASS input filter/formant movement, transient articulation, fundamentals, independent DNA, dry center, multirate automation and exact versions 1-12. Metrics do not establish subjective quality.\n";
+    std::cout<<"PASS input filter/formant movement, transient articulation, fundamentals, independent DNA, dry center, multirate automation and exact versions 1-13. Metrics do not establish subjective quality.\n";
 }

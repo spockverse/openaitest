@@ -152,7 +152,7 @@ public:
                 const float dnaShift=advanced?influence*(std::clamp((modernShape.logPeaks[deepControls?1:0]-6.5510803f)*(deepControls?.65f:1.f),-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
                 const float pitchLog=current.pitch*.057762265f;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+(tonalEnhancer?0:pitchLog),tonalEnhancer?pitchLog*influence:deepControls?0:pitchLog*influence,inputResponsive,brightness,fast,tonalEnhancer);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+(tonalEnhancer?0:pitchLog),tonalEnhancer?pitchLog*influence:deepControls?0:pitchLog*influence,inputResponsive,brightness,fast,tonalEnhancer,target.processingVersion>=14);
                 // Reuse the broad tonal bank for continuous XY character and optional DNA.
                 const float right=std::clamp((current.signedX+1)*.5f,0.f,1.f),bottom=std::clamp((current.signedY+1)*.5f,0.f,1.f);
                 const float metal=right*(1-bottom),crunch=(1-right)*(1-bottom),robot=right*bottom;
