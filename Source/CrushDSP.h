@@ -53,6 +53,7 @@ public:
         const bool deepControls=target.processingVersion>=10;
         const bool dnaRefinement=target.processingVersion>=11;
         const bool inputResponsive=target.processingVersion>=12;
+        const bool tonalEnhancer=target.processingVersion>=13;
         // Sanitize before retaining the dry/bypass copy or feeding any state.
         for(int ch=0;ch<std::min(channels,2);++ch)if(!std::isfinite(frame[ch]))frame[ch]=0;
         const std::array<float,2> original {frame[0],channels==2?frame[1]:0};
@@ -151,7 +152,7 @@ public:
                 const float dnaShift=advanced?influence*(std::clamp((modernShape.logPeaks[deepControls?1:0]-6.5510803f)*(deepControls?.65f:1.f),-1.1f,1.1f)+.7f*(modernShape.bands[3]-modernShape.bands[8])):0;
                 const float dnaMotion=advanced?influence*(2*rough-1+.5f*(modulation-.5f)):0;
                 const float pitchLog=current.pitch*.057762265f;
-                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+pitchLog,deepControls?0:pitchLog*influence,inputResponsive,brightness,fast);
+                sineCrush.set(current.signedX,current.signedY,current.activity,current.bits,current.rate,controlFix?0:driveUnit,current.protect,articulation,controlInterval,advanced,controlFix&&!deepControls?0:dnaShift,controlFix&&!deepControls?0:dnaMotion,digitalRouting,expressiveXY,deepControls,deepControls?driveUnit:0,deepControls?influence:0,modernShape.logPeaks[1]+(tonalEnhancer?0:pitchLog),tonalEnhancer?pitchLog*influence:deepControls?0:pitchLog*influence,inputResponsive,brightness,fast,tonalEnhancer);
                 // Reuse the broad tonal bank for continuous XY character and optional DNA.
                 const float right=std::clamp((current.signedX+1)*.5f,0.f,1.f),bottom=std::clamp((current.signedY+1)*.5f,0.f,1.f);
                 const float metal=right*(1-bottom),crunch=(1-right)*(1-bottom),robot=right*bottom;
@@ -160,7 +161,9 @@ public:
                 tonal.setModern(controlFix&&influence>0?brightness:.4f,.25f*influence,influence,modernShape,0,controlInterval,false,controlFix&&influence>0,coreColour,coreVowel,deepControls,dnaRefinement,current.pitch);
                 if(controlFix){
                     const float depth=influence*(1.5f-.5f*influence);
-                    const float driveDepth=driveUnit*(.5f+1.5f*driveUnit);
+                    // DRIVE controls modulation depth in the enhancer. Keep
+                    // the independent sample-derived excitation term intact.
+                    const float driveDepth=tonalEnhancer?0:driveUnit*(.5f+1.5f*driveUnit);
                     const std::array<float,4> goal{1/std::max(.035f,fast*1.6f),
                         1+9*driveDepth+16*depth*(.35f+.45f*rough+.2f*(1-harmonic)),depth*1.2f*even,
                         .35f*driveDepth+.55f*depth-.1925f*driveDepth*depth};
@@ -193,6 +196,14 @@ public:
             const float conditioningActivity=std::max(current.activity,lowerT*lowerT*(3-2*lowerT));
             for(int ch=0;ch<std::min(channels,2);++ch){const auto c=std::size_t(ch);
                 if(controlFix&&(digitalRouting||driveUnit>0||influence>0)){
+                    if(tonalEnhancer){
+                        // Linear below headroom. The existing bounded curve
+                        // only catches overload, rather than saturating every
+                        // source sample or compressing its protected bass.
+                        const float level=std::abs(frame[ch]);
+                        if(level>.9f){const float excess=level-.9f,ratio=excess/.1f;
+                            frame[ch]=std::copysign(.9f+excess/std::sqrt(1+ratio*ratio),frame[ch]);}
+                    }else{
                     // Bound the transformed body, preserving the complementary
                     // bass foundation. Inactive controls leave XY sample-exact.
                     const float foundation=sineCrush.foundation()[c],body=frame[ch]-foundation;
@@ -200,6 +211,7 @@ public:
                     const float conditioned=foundation+body/std::sqrt(1+ratio*ratio);
                     const float conditioning=deepControls?conditioningActivity+(1-conditioningActivity)*std::min(1.f,2*std::max(driveUnit,influence)):digitalRouting?current.activity:std::max(driveUnit,influence);
                     frame[ch]+=conditioning*(conditioned-frame[ch]);
+                    }
                 }
                 const float blend=std::min(1.f,current.activity*8)*current.mix;
                 const float processed=(dry[c]+blend*(frame[ch]-dry[c]))*output;

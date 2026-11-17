@@ -63,9 +63,9 @@ jobs:
           $env:WUBROT_CONTENT_DIR = Join-Path $PWD 'Resources'
           & build/Release/WubrotCallbackBenchmark.exe build/Performance v048 closed 10 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance dna closed 12 timing-only
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance dna closed 13 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & build/Release/WubrotCallbackBenchmark.exe build/Performance dna-ui ui 12 timing-only
+          & build/Release/WubrotCallbackBenchmark.exe build/Performance dna-ui ui 13 timing-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           foreach ($task_name in @('v048', 'dna', 'dna-ui')) {
             $task_report = Get-Content "build/Performance/$task_name-callback.json" -Raw | ConvertFrom-Json

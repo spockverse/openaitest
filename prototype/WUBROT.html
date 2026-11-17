@@ -790,6 +790,13 @@ if(nativeBackend){
  nativeBackend.addEventListener('wubrotState',state=>{
   applyingNative=true;let acknowledgeVisual=false;
   try{
+   if(Number.isInteger(state.xyMapping)){
+    const xAxis=document.querySelector('.axis-x'),yAxis=document.querySelector('.axis-y');
+    const xLabel=state.xyMapping>=13?'MODULATION FREQUENCY →':'BIT DEPTH →';
+    const yLabel=state.xyMapping>=13?'MODULATION SHAPE →':'SAMPLE-RATE REDUCTION →';
+    if(xAxis.textContent!==xLabel)xAxis.textContent=xLabel;
+    if(yAxis.textContent!==yLabel)yAxis.textContent=yLabel;
+   }
    if(Number.isFinite(state.crushBitDepth))nativeBits=state.crushBitDepth;
    if(Number.isFinite(state.crushSampleRate))nativeRate=state.crushSampleRate;
    const firstPower=awaitingNativePower&&Number.isFinite(state.enabled);

@@ -13,6 +13,11 @@ struct XYMapping
         const float length=std::hypot(x,y);
         if(length>1){x/=length;y/=length;}
         if(version<2)return {16-(x+1)*7,static_cast<float>(500*std::pow(sampleRate/500,(y+1)*.5)),1};
+        if(version>=13){
+            // X tunes the carrier and Y morphs its shape in SineCrush. Keep
+            // source precision/bandwidth intact; texture comes from modulation.
+            return {16,float(sampleRate),std::min(1.f,length)};
+        }
         const float minimumRate=version>=8?32.f:500.f;
         const float horizontal=std::pow(std::abs(x),.35f),vertical=std::pow(std::abs(y),.65f);
         XYMapping result{16-14*horizontal,static_cast<float>(sampleRate*std::pow(minimumRate/sampleRate,vertical)),std::min(1.0f,length)};

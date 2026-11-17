@@ -313,7 +313,16 @@ int main()
         axis.setParameterValue("y", 1); const auto bottom = render(axis);
         auto steps = [](const std::vector<float>& audio) { int count = 0; for (std::size_t i = 1; i < audio.size(); ++i) if (std::abs(audio[i] - audio[i - 1]) > .01f) ++count; return count; };
         require(top!=bottom,"Signed vertical character did not distinguish directions");
-        axis.setParameterValue("y",0);const auto centre=render(axis);require(steps(centre)>steps(bottom),"Both vertical extremes must reduce sample rate from centre");
+        require(float(axis.uiState()["crushSampleRate"])==48000,"New carrier shape control degrades source sample rate");
+        axis.setParameterValue("y",0);axis.setParameterValue("x",-.5f);const auto left=render(axis);
+        axis.setParameterValue("x",.5f);require(render(axis)!=left,"Native X parameter does not change the modulated sound");
+        // Saved crusher models retain the old vertical sample-rate semantics.
+        juce::MemoryBlock oldAxisState;axis.getStateInformation(oldAxisState);
+        auto oldAxisXml=juce::AudioProcessor::getXmlFromBinary(oldAxisState.getData(),int(oldAxisState.getSize()));
+        oldAxisXml->setAttribute("xyMapping",12);juce::AudioProcessor::copyXmlToBinary(*oldAxisXml,oldAxisState);
+        axis.setStateInformation(oldAxisState.getData(),int(oldAxisState.getSize()));axis.setParameterValue("x",0);
+        axis.setParameterValue("y",1);const auto oldBottom=render(axis);
+        axis.setParameterValue("y",0);const auto centre=render(axis);require(steps(centre)>steps(oldBottom),"Legacy vertical sample-rate mapping changed");
         p.setCurrentProgram(2); require(p.getCurrentProgram() == 2, "host preset selection must acknowledge immediately"); juce::Thread::sleep(75); juce::Timer::callPendingTimersSynchronously();
         require(p.getNumPrograms() == 3, "factory preset count");
         const auto folder = juce::File::createTempFile("-wubrot-content"); folder.deleteFile(); folder.createDirectory();
