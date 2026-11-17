@@ -99,7 +99,7 @@ private:
               window.__visualProbe={packets:0,received:0,rendered:0,pixelMean:0,geometryMean:0,shaderGain:0,pixelTests:0,frames:0,surges:0,above:false};
               window.__JUCE__.backend.addEventListener('wubrotAudio',d=>{const p=window.__visualProbe;p.packets++;p.received=Math.max(p.received,Number(d.intensity)||0);});
               const original=renderer.render.bind(renderer);renderer.render=(...args)=>{
-                const result=original(...args),p=window.__visualProbe;p.frames++;p.rendered=Math.max(p.rendered,Number(args[4])||0);if(renderer.gl)p.shaderGain=Math.max(p.shaderGain,Number(renderer.gl.getUniform(renderer.program,renderer.reactiveGain))||0);
+                const result=original(...args),p=window.__visualProbe;p.frames++;p.rendered=Math.max(p.rendered,Number(args[4])||0);if(renderer.gl)p.shaderGain=Math.max(p.shaderGain,Number(renderer.gl.getUniform(renderer.material.p,renderer.material.uniforms.audio))||0);
                 if(args[4]>.32&&!p.above){p.surges++;p.above=true;}else if(args[4]<.22)p.above=false;
                 if(args[4]>.3&&p.pixelTests<3){
                   const read=()=>{if(renderer.gl){const a=new Uint8Array(640*640*4);renderer.gl.readPixels(0,0,640,640,renderer.gl.RGBA,renderer.gl.UNSIGNED_BYTE,a);return a;}paint(true);return ctx.getImageData(0,0,640,640).data;};

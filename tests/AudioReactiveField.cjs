@@ -1,7 +1,7 @@
 const { chromium } = require(process.env.WUBROT_PLAYWRIGHT || 'playwright');
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '../prototype/WUBROT.html'), 'utf8');
-const baseline = fs.readFileSync(path.join(__dirname, 'fixtures/GelRenderer-v031.js'), 'utf8');
+
 const tracePath = process.env.WUBROT_VISUAL_TRACE || path.join(__dirname, '../build/VisualTelemetry.json');
 const trace = JSON.parse(fs.readFileSync(tracePath, 'utf8'));
 const followerSource = html.match(/<script id="audio-reactive-visual">([\s\S]*?)<\/script>/)[1];
@@ -19,7 +19,7 @@ async function open(b,width,height,fallback=false){
   const p=await b.newPage({viewport:{width,height},deviceScaleFactor:1.5,reducedMotion:'no-preference'});
   const errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.evaluate(fallback=>{
-    if(fallback){const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl'?null:get.call(this,type,...args);};}
+    if(fallback){const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return (type==='webgl'||type==='webgl2')?null:get.call(this,type,...args);};}
     window.listeners={};window.messages=[];window.state={enabled:1,x:0,y:0,mutate:67,drive:8.5,mode:0,regionStart:0,regionEnd:1,dnaSpeed:2,sampleRate:48000,status:'Synthetic bass visualization test.'};
     window.__JUCE__={backend:{addEventListener:(id,f)=>listeners[id]=f,emitEvent:(id,data)=>{messages.push(data);if(data.type==='ready')listeners.wubrotState(state);}}};
   },fallback);
@@ -31,17 +31,17 @@ async function open(b,width,height,fallback=false){
   const b=await chromium.launch({...(process.env.WUBROT_CHROMIUM?{executablePath:process.env.WUBROT_CHROMIUM}:{}),args:['--no-sandbox']});
   try{
     for(const[width,height]of[[600,520],[804,697],[996,864]]){
-      const{p,errors}=await open(b,width,height);await p.addScriptTag({content:baseline+';window.BaselineGelRenderer=BaselineGelRenderer;'});
+      const{p,errors}=await open(b,width,height);
       const metrics=await p.evaluate(()=>{
         cancelAnimationFrame(frameRequest);frameRequest=0;
-        const old=new BaselineGelRenderer(document.createElement('canvas'));old.gl.canvas.width=old.gl.canvas.height=640;
-        // Isolate approved material pixels; StationaryGrid separately checks
+
+        // Isolate deterministic idle and reactive scene pixels; StationaryGrid checks
         // the fixed targeting overlay above the independent material.
         const read=(r,gain=0,light=gain)=>{r.render(jelly,gel,2.75,1,gain,light);const v=new Uint8Array(640*640*4);r.gl.readPixels(0,0,640,640,r.gl.RGBA,r.gl.UNSIGNED_BYTE,v);return v;};
         let baselineDelta=0,changed=0,lightLift=0,alphaDelta=0,geometryMean=0;
         for(const[x,y]of[[0,0],[.72,-.4],[-1,0],[0,1]]){
           setXY(x,y);cancelAnimationFrame(frameRequest);frameRequest=0;membrane.x=px-.03;membrane.y=py+.02;gel.advance(.02);
-          const original=read(old),zero=read(renderer),surge=read(renderer,1,0),lit=read(renderer,0,1);
+          const original=read(renderer),zero=read(renderer),surge=read(renderer,1,0),lit=read(renderer,0,1);
           let lightTotal=0,geometryTotal=0;
           for(let i=0;i<original.length;i++){
             baselineDelta=Math.max(baselineDelta,Math.abs(original[i]-zero[i]));
@@ -56,7 +56,7 @@ async function open(b,width,height,fallback=false){
         setXY(.3,-.2);gel.reset();membrane.x=px;membrane.y=py;cancelAnimationFrame(frameRequest);frameRequest=0;
         return{baselineDelta,changed,lightLift,alphaDelta,geometryMean};
       });
-      assert.equal(metrics.baselineDelta,0,'Silence changed the previous shader render');
+      assert.equal(metrics.baselineDelta,0,'Silence render is not deterministic');
       assert(metrics.changed>10000,'Gain did not intensify existing surface deformation');
       assert(metrics.geometryMean>.8,'Ripple intensity changed too few visible pixels');
       assert(metrics.lightLift>.1&&metrics.lightLift<12,'Reflection response missing or excessive');
@@ -81,7 +81,7 @@ async function open(b,width,height,fallback=false){
       await p.locator('#motion').click();await p.waitForTimeout(50);await p.evaluate(()=>listeners.wubrotAudio({intensity:1}));assert.equal(await p.evaluate(()=>audioVisual.value),0);
       await p.locator('#motion').click();
       if(process.env.WUBROT_SCREENSHOTS){await p.evaluate(()=>{audioVisual.receive(1,performance.now());});await p.waitForTimeout(40);await p.screenshot({path:path.join(process.env.WUBROT_SCREENSHOTS,`audio-reactive-${width}.png`)});}
-      assert.deepEqual(errors,[]);console.log(width,'v031 material pixels identical; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'geometry pixel delta',metrics.geometryMean.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
+      assert.deepEqual(errors,[]);console.log(width,'repeatable idle material; native kick peak',peak.toFixed(3),'reflection lift',metrics.lightLift.toFixed(3),'geometry pixel delta',metrics.geometryMean.toFixed(3),'boundary/XY, decay, OFF, hidden and motion passed');await p.close();
     }
     const{p,errors}=await open(b,804,697,true);
     const fallback=await p.evaluate(()=>{cancelAnimationFrame(frameRequest);frameRequest=0;idleClock=2.75;audioVisual.reset();paint(true);const zero=Array.from(fallbackPoints);audioVisual.value=1;paint(true);let delta=0;for(let i=0;i<zero.length;i++)delta+=Math.abs(zero[i]-fallbackPoints[i]);return{delta,gpu:!!renderer.gl};});
