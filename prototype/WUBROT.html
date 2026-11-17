@@ -681,9 +681,25 @@ function syncButtons(){$('liquid').setAttribute('aria-pressed',liquid);$('liquid
 $('liquid').onclick=()=>{liquid=!liquid;if(engineIsOn())gel.reset();syncButtons();schedule();};$('motion').onclick=()=>{motion=!motion;last=0;if(engineIsOn())gel.reset();syncButtons();schedule();};
 function controls(){for(const id of ['mutate','drive']){const v=+$(id).value;$(id+'Dial').style.setProperty('--turn',(v/(id==='drive'?36:100)*270)+'deg');$(id+'Value').textContent=id==='drive'?v.toFixed(1):v+'%';}$('influenceValue').textContent=$('influence').value+'%';schedule();}
 for(const id of ['mutate','drive','influence'])$(id).oninput=()=>{controls();if(id!=='influence')nativeParameter(id,+$(id).value);};
+// Relative circular tracking follows the same 270-degree indicator arc.
+// Re-anchor within the centre dead zone, where a pointer angle is undefined.
+function bindRotary(element,visual,id,min,max,getValue,setValue,fine=.1,before=()=>{}){
+ let drag=null;
+ const angle=e=>{const r=visual.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;return Math.hypot(x,y)<Math.min(r.width,r.height)*.08?null:Math.atan2(y,x);};
+ element.style.touchAction='none';
+ element.onpointerdown=e=>{if(e.button!==0||drag)return;e.preventDefault();e.stopPropagation();before();element.focus({preventScroll:true});drag={pointer:e.pointerId,angle:angle(e),value:getValue()};element.setPointerCapture(e.pointerId);beginNativeTouch(id);};
+ if(visual!==element)visual.addEventListener('pointerdown',element.onpointerdown);
+ element.onpointermove=e=>{if(!drag||e.pointerId!==drag.pointer)return;e.preventDefault();e.stopPropagation();const next=angle(e);if(next!==null&&drag.angle!==null){const delta=Math.atan2(Math.sin(next-drag.angle),Math.cos(next-drag.angle));drag.value=clamp(drag.value+delta/(Math.PI*1.5)*(max-min)*(e.shiftKey?fine:1),min,max);setValue(drag.value);}drag.angle=next;};
+ const finish=e=>{if(!drag||(e&&e.pointerId!==undefined&&e.pointerId!==drag.pointer))return;const pointer=drag.pointer;drag=null;if(element.hasPointerCapture(pointer))element.releasePointerCapture(pointer);endNativeTouch(id);};
+ for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])element.addEventListener(event,finish);
+ window.addEventListener('blur',()=>{finish();endNativeTouch(id);});
+ return{get active(){return drag!==null;}};
+}
 for(const id of ['mutate','drive']){
- $(id).addEventListener('pointerdown',e=>{if(e.button!==0)return;$(id).setPointerCapture(e.pointerId);beginNativeTouch(id);});
- for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])$(id).addEventListener(event,()=>endNativeTouch(id));
+ const input=$(id),publish=value=>{const previous=input.value,step=+input.step||1;input.value=String(Math.round(value/step)*step);if(input.value!==previous)input.oninput();};
+ bindRotary(input,$(id+'Dial'),id,+input.min,+input.max,()=>+input.value,publish);
+ input.ondblclick=e=>{e.preventDefault();beginNativeTouch(id);publish(+input.defaultValue);endNativeTouch(id);};
+ input.addEventListener('blur',()=>endNativeTouch(id));
  $(id).addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))beginNativeTouch(id);});
  $(id).addEventListener('keyup',()=>endNativeTouch(id));
 }
@@ -711,25 +727,18 @@ $('speedSelect').onkeydown=e=>{if(['ArrowDown','ArrowUp','Home','End'].includes(
 document.addEventListener('pointerdown',e=>{if(!$('speedSelect').contains(e.target))closeSpeedMenu();});
 document.addEventListener('focusin',e=>{if(!$('speedSelect').contains(e.target))closeSpeedMenu();});
 window.addEventListener('resize',()=>closeSpeedMenu());
-speedKnob.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();closeSpeedMenu();speedKnob.focus({preventScroll:true});speedKnob.setPointerCapture(e.pointerId);speedDrag={y:e.clientY,value:dnaSpeedIndex};beginNativeTouch('dnaSpeed');};
-speedKnob.onpointermove=e=>{if(!speedDrag)return;e.preventDefault();e.stopPropagation();const scale=shell.getBoundingClientRect().width/shell.offsetWidth;speedDrag.value=clamp(speedDrag.value+(speedDrag.y-e.clientY)/(32*scale)*(e.shiftKey?.2:1),0,dnaSpeeds.length-1);speedDrag.y=e.clientY;setDnaSpeed(speedDrag.value,true);};
-function endSpeedDrag(){if(!speedDrag)return;speedDrag=null;endNativeTouch('dnaSpeed');}
-for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])speedKnob.addEventListener(event,endSpeedDrag);
-window.addEventListener('blur',()=>{endSpeedDrag();closeSpeedMenu();});
-speedKnob.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();if(!speedDrag&&e.deltaY!==0)chooseSpeed(dnaSpeedIndex+(e.deltaY<0?1:-1));},{passive:false});
+speedDrag=bindRotary(speedKnob,speedKnob,'dnaSpeed',0,dnaSpeeds.length-1,()=>dnaSpeedIndex,value=>setDnaSpeed(value,true),.2,closeSpeedMenu);
+window.addEventListener('blur',()=>closeSpeedMenu());
+speedKnob.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();if(!speedDrag.active&&e.deltaY!==0)chooseSpeed(dnaSpeedIndex+(e.deltaY<0?1:-1));},{passive:false});
 speedKnob.ondblclick=e=>{e.preventDefault();e.stopPropagation();chooseSpeed(2);};
 speedKnob.onkeydown=e=>{let next=dnaSpeedIndex;if(['ArrowUp','ArrowRight','PageUp'].includes(e.key))next++;else if(['ArrowDown','ArrowLeft','PageDown'].includes(e.key))next--;else if(e.key==='Home')next=0;else if(e.key==='End')next=dnaSpeeds.length-1;else return;e.preventDefault();e.stopPropagation();chooseSpeed(next);};
 let dnaPitch=0,pitchDrag=null;
 const pitchKnob=$('dnaPitchKnob');
 function setDnaPitch(value,notify=false){if(!Number.isFinite(value))return;value=Math.round(clamp(value,-24,24)*100)/100;const changed=value!==dnaPitch;dnaPitch=value;const label=(value>0?'+':'')+String(value)+' st';pitchKnob.style.setProperty('--turn',((value+24)/48*270)+'deg');pitchKnob.setAttribute('aria-valuenow',String(value));pitchKnob.setAttribute('aria-valuetext',label);$('dnaPitchValue').textContent=label;$('dnaPitchValue').classList.toggle('precise',label.length>7);if(changed&&notify)nativeParameter('dnaPitch',value);}
 function choosePitch(value){beginNativeTouch('dnaPitch');setDnaPitch(value,true);endNativeTouch('dnaPitch');}
-pitchKnob.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();pitchKnob.focus({preventScroll:true});pitchKnob.setPointerCapture(e.pointerId);pitchDrag={y:e.clientY,value:dnaPitch};beginNativeTouch('dnaPitch');};
-pitchKnob.onpointermove=e=>{if(!pitchDrag)return;e.preventDefault();e.stopPropagation();const scale=shell.getBoundingClientRect().width/shell.offsetWidth;pitchDrag.value=clamp(pitchDrag.value+(pitchDrag.y-e.clientY)/(4*scale)*(e.shiftKey?.1:1),-24,24);pitchDrag.y=e.clientY;setDnaPitch(pitchDrag.value,true);};
-function endPitchDrag(){if(!pitchDrag)return;pitchDrag=null;endNativeTouch('dnaPitch');}
-for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])pitchKnob.addEventListener(event,endPitchDrag);
-window.addEventListener('blur',endPitchDrag);
+pitchDrag=bindRotary(pitchKnob,pitchKnob,'dnaPitch',-24,24,()=>dnaPitch,value=>setDnaPitch(value,true));
 pitchKnob.ondblclick=e=>{e.preventDefault();e.stopPropagation();choosePitch(0);};
-pitchKnob.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();if(!pitchDrag&&e.deltaY)choosePitch(dnaPitch+(e.deltaY<0?1:-1)*(e.shiftKey?.1:1));},{passive:false});
+pitchKnob.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();if(!pitchDrag.active&&e.deltaY)choosePitch(dnaPitch+(e.deltaY<0?1:-1)*(e.shiftKey?.1:1));},{passive:false});
 pitchKnob.onkeydown=e=>{let value=dnaPitch;if(['ArrowUp','ArrowRight'].includes(e.key))value+=e.shiftKey?.1:1;else if(['ArrowDown','ArrowLeft'].includes(e.key))value-=e.shiftKey?.1:1;else if(e.key==='Home')value=-24;else if(e.key==='End')value=24;else return;e.preventDefault();e.stopPropagation();choosePitch(value);};
 setDnaPitch(0);
 $('regionLoop').onclick=e=>{e.stopPropagation();setDnaMode(dnaMode===0?1:0);};

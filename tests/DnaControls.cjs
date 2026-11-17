@@ -2,6 +2,13 @@ const { chromium } = require(process.env.WUBROT_PLAYWRIGHT || 'playwright');
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '../prototype/WUBROT.html'), 'utf8');
 const speeds = ['1/1','1/2','1/4','1/8D','1/8','1/16D','1/8T','1/16','1/16T','1/32','1/64'];
+async function circle(p, selector, from, to, down=true, up=true) {
+ const r=await p.locator(selector).boundingBox(),point=a=>({x:r.x+r.width/2+Math.cos(a*Math.PI/180)*r.width*.36,y:r.y+r.height/2+Math.sin(a*Math.PI/180)*r.height*.36});
+ if(down){const a=point(from);await p.mouse.move(a.x,a.y);await p.mouse.down();}
+ const count=Math.max(1,Math.ceil(Math.abs(to-from)/8));
+ for(let n=1;n<=count;n++){const a=point(from+(to-from)*n/count);await p.mouse.move(a.x,a.y);}
+ if(up)await p.mouse.up();
+}
 async function checkSpeed(p, index) {
   await p.waitForFunction(index => document.getElementById('dnaSpeedKnob').getAttribute('aria-valuenow') === String(index), index);
   assert(await p.evaluate(() => scrollX === 0 && scrollY === 0 && document.querySelector('.shell').getBoundingClientRect().top === 0), 'Interaction scrolled the fixed editor');
@@ -103,14 +110,13 @@ async function assertGesture(p) {
       // and measures deltas in design coordinates at every editor size/DPI.
       await recall(p, { dnaSpeed: 2 });
       const knob = await p.locator('#dnaSpeedKnob').boundingBox(), x = knob.x + knob.width / 2, y = knob.y + knob.height / 2;
-      await p.mouse.move(x, y); await p.mouse.down(); await p.mouse.move(x, y - 34 * scale, { steps: 5 });
+      await circle(p, '#dnaSpeedKnob', 0, 30, true, false);
       await checkSpeed(p, 3);
       await p.evaluate(() => listeners.wubrotState({ ...state, dnaSpeed: 0 })); await checkSpeed(p, 3);
-      await p.mouse.move(x, y - 66 * scale, { steps: 5 }); await p.mouse.up(); await checkSpeed(p, 4); await assertGesture(p);
+      await circle(p, '#dnaSpeedKnob', 30, 54, false, true); await checkSpeed(p, 4); await assertGesture(p);
       await recall(p, { dnaSpeed: 2 });
-      await p.keyboard.down('Shift'); await p.mouse.move(x, y); await p.mouse.down();
-      await p.mouse.move(x, y - 34 * scale, { steps: 5 }); await checkSpeed(p, 2);
-      await p.mouse.move(x, y - 86 * scale, { steps: 5 }); await p.mouse.up(); await p.keyboard.up('Shift');
+      await p.keyboard.down('Shift'); await circle(p, '#dnaSpeedKnob', 0, 34, true, false); await checkSpeed(p, 2);
+      await circle(p, '#dnaSpeedKnob', 34, 86, false, true); await p.keyboard.up('Shift');
       await checkSpeed(p, 3); await assertGesture(p);
       await p.evaluate(() => messages = []); await p.mouse.move(x, y); await p.mouse.wheel(0, 100);
       await checkSpeed(p, 2); await assertGesture(p);
@@ -131,9 +137,36 @@ async function assertGesture(p) {
       }
       await p.locator('#dnaPitchKnob').dblclick();assert.equal(await p.locator('#dnaPitchValue').textContent(),'0 st');
       const pitch=await p.locator('#dnaPitchKnob').boundingBox();
-      await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2);await p.mouse.down();await p.keyboard.down('Shift');await p.mouse.move(pitch.x+pitch.width/2,pitch.y+pitch.height/2-40*scale,{steps:10});await p.mouse.up();await p.keyboard.up('Shift');
+      await p.keyboard.down('Shift');await circle(p,'#dnaPitchKnob',0,56.25);await p.keyboard.up('Shift');
       assert.equal(await p.locator('#dnaPitchValue').textContent(),'+1 st');
       const pitchEvents=await p.evaluate(()=>messages.filter(m=>m.id==='dnaPitch'));assert(pitchEvents.some(m=>m.type==='gesture'&&m.start)&&pitchEvents.some(m=>m.type==='gesture'&&!m.start));
+      // Main dials share the same angular arc, with no initial jump or host echo.
+      for(const [id,initial,max] of [['mutate',50,100],['drive',18,36]]){
+        await recall(p,{[id]:initial});
+        await circle(p,'#'+id+'Dial',90,117);
+        assert(Math.abs(+await p.locator('#'+id).inputValue()-(initial+max*.1))<.11,'Lower dial circumference is not interactive');
+        await recall(p,{[id]:initial});
+        await circle(p,'#'+id+'Dial',170,170,true,false);
+        assert.equal(await p.locator('#'+id).inputValue(),String(initial),'Pointer-down jumped');
+        assert(await p.locator('#'+id).evaluate(el=>el.hasPointerCapture(1)),'Pointer capture missing');
+        await circle(p,'#'+id+'Dial',170,197,false,false); // crosses atan2 +/- pi
+        const raised=+await p.locator('#'+id).inputValue();assert(Math.abs(raised-(initial+max*.1))<.11);
+        await p.evaluate(({id})=>listeners.wubrotState({...state,[id]:0}),{id});
+        assert.equal(+await p.locator('#'+id).inputValue(),raised,'Stale host echo replaced drag');
+        await circle(p,'#'+id+'Dial',197,170,false,true);
+        assert(Math.abs(+await p.locator('#'+id).inputValue()-initial)<.11,'Counterclockwise failed');
+        const events=await p.evaluate(id=>messages.filter(m=>m.id===id),id);
+        assert.deepEqual(events.filter(e=>e.type==='gesture').map(e=>e.start),[true,false]);
+        assert.equal(events.filter(e=>e.type==='parameter').at(-1).value,initial);
+        await p.keyboard.down('Shift');await circle(p,'#'+id+'Dial',0,27);await p.keyboard.up('Shift');
+        assert(Math.abs(+await p.locator('#'+id).inputValue()-(initial+max*.01))<.11,'Fine angle failed');
+        await circle(p,'#'+id+'Dial',0,30,true,false);
+        await p.locator('#'+id).dispatchEvent('pointercancel',{pointerId:1});await p.mouse.up();
+        assert(!await p.evaluate(id=>nativeTouches.has(id),id),'Cancelled gesture remains open');
+        await p.locator('#'+id).dblclick();assert.equal(+await p.locator('#'+id).inputValue(),id==='mutate'?100:0);
+        await recall(p,{[id]:initial});await p.locator('#'+id).focus();await p.keyboard.press('ArrowRight');
+        assert(+await p.locator('#'+id).inputValue()>initial,'Keyboard adjustment lost');
+      }
       // One cyan switch: LOOP left, RETRIGGER right, same illuminated color.
       await recall(p, { mode: 0, dnaSpeed: 0 });
       const litColor = await p.locator('.mode-loop').evaluate(el => getComputedStyle(el).color);
