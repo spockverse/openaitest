@@ -282,24 +282,33 @@ class GelRenderer {
    const meshFragment=header+`in vec3 world;in vec3 normal;out vec4 colour;
    float ggx(vec3 n,vec3 l,float rough){vec3 h=normalize(l+vec3(0,0,1));float nh=max(0.,dot(n,h)),a=rough*rough,a2=a*a;return min(64.,a2/(3.14159*pow(nh*nh*(a2-1.)+1.,2.)+.0001));}
    void main(){float r=length(world.xy);if(r>R)discard;vec3 n=normalize(normal);float d=length(world.xy-anchor);
-    float marble=0.;if(detail>.5){marble=sin(world.x*23.+sin(world.y*17.+world.z*12.))*sin(world.y*31.-world.x*9.);n=normalize(n+vec3(dFdx(marble),dFdy(marble),0.)*.28);}
+    // A shallow, coherent wet coating follows the real folds; contact and the
+    // silhouette remain governed by the approved mesh and pressure geometry.
+    vec2 slope=-n.xy/max(n.z,.08);float u=world.x*7.+world.y*4.+world.z*12.-clock*.075;
+    float flow=sin(u),marble=flow,cu=cos(u);vec2 gu=vec2(7,4)+slope*12.;vec2 coat=.014*cu*gu;
+    if(detail>.5){float v=world.y*39.-world.x*17.+world.z*22.+flow*1.2+clock*.085;float ribbon=sin(v);marble=flow*ribbon;coat+=.003*cos(v)*(vec2(-17,39)+slope*22.+1.2*cu*gu);}
+    float coating=(.35+.65*smoothstep(.065,.18,d))*(1.-smoothstep(.80,R,r));
+    n=normalize(vec3(n.xy-coat*n.z*coating,n.z));
     vec3 view=vec3(0,0,1),l=normalize(vec3(-.55,.72,.75)),l2=normalize(vec3(.8,-.4,.55));
     float nv=max(.02,n.z),fresnel=.055+.945*pow(1.-nv,5.);
-    float recess=exp(-d*d/.018),thickness=clamp(.5+world.z*1.8,0.,1.);
-    vec3 base=mix(vec3(.0035,.00035,.015),vec3(.018,.0015,.095),thickness);
-    base*=.9+.1*marble;
+    float thickness=clamp(.5+world.z*1.8,0.,1.);
+    vec3 base=mix(vec3(.004,.0004,.018),vec3(.026,.0018,.105),thickness);
+    base*=.72+.42*marble;
     vec3 c=base*(.6+.65*max(0.,dot(n,l))+.28*max(0.,dot(n,l2)));
     c+=vec3(.90,.55,1.1)*ggx(n,l,.16)*.075+vec3(.80,.035,.65)*ggx(n,l2,.20)*.065;
-    // Bounded soft-box reflections provide wet dielectric highlights, not chrome.
-    vec3 refl=reflect(-view,n);float strip=(1.-smoothstep(0.,.28,abs(refl.x+.32)))*smoothstep(-.2,.6,refl.y);
-    float magenta=(1.-smoothstep(0.,.36,abs(refl.y+.52)))*smoothstep(-.1,.8,refl.x);
-    c+=vec3(1.65,1.04,2.05)*strip*.95+vec3(1.48,.016,1.02)*magenta*.9;
+    // Curved, feathered studio streaks with a narrow wet core, rather than
+    // broad rectangular patches. Polynomial lobes need no extra texture/pass.
+    vec3 refl=reflect(-view,n);float curve=refl.x+.30+.18*(refl.y*refl.y-.35);
+    float strip=max(0.,1.-curve*curve*9.);strip*=strip;strip*=smoothstep(-.65,.65,refl.y);
+    float curve2=refl.y+.43-.20*refl.x*refl.x+.06*refl.x;
+    float magenta=max(0.,1.-curve2*curve2*5.5);magenta*=magenta;magenta*=smoothstep(-.65,.75,refl.x);
+    c+=vec3(1.65,1.04,2.05)*(.24*strip+.80*strip*strip*strip)+vec3(1.48,.016,1.02)*magenta*.82;
     c+=vec3(.38,.016,.70)*fresnel*.7;
     if(d<.45){float localWeight=1.-smoothstep(.25,.45,d);vec3 toLight=vec3(anchor,dome(anchor)+.18)-world;float attenuation=localWeight/(1.+dot(toLight,toLight)*24.);
     float illumination=max(0.,dot(n,normalize(toLight)));float pulse=1.+.07*sin(clock*2.1)+.22*lightBoost;
     c+=powered*vec3(.22,.012,.36)*attenuation*illumination*pulse;
     c+=powered*vec3(.72,.31,.82)*ggx(n,normalize(toLight),.3)*attenuation*.015*pulse;}
-    c*=1.-.32*exp(-pow(d/.112,4.));c+=base*pow(max(0.,1.-nv),2.)*.15;
+    c*=1.-.32*exp(-pow(d/.112,4.));c+=base*pow(max(0.,1.-nv),2.)*.28;
     c*=1.+lightBoost*.10*exp(-d*d/.12);
     if(powered<.5){float grey=dot(c,vec3(.21,.72,.07));c=vec3(grey*.65);}
     c=c/(1.+c);colour=vec4(pow(max(c,vec3(0)),vec3(1./2.2)),1.-smoothstep(R-.004,R,r));
