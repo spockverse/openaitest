@@ -254,7 +254,7 @@ class GelRenderer {
    const gl=surface.getContext('webgl2',{alpha:true,antialias:false,depth:true,stencil:false,premultipliedAlpha:false,powerPreference:'low-power'});if(!gl||gl.isContextLost())return;this.gl=gl;
    const header=`#version 300 es
    precision highp float;
-   uniform vec2 anchor;uniform vec2 lag;uniform float clock;uniform float movement;uniform float audio;uniform float lightBoost;uniform float powered;uniform vec4 rotation;uniform float detail;uniform samplerCube studio;uniform sampler2D finish;uniform float finishReady;
+   uniform vec2 anchor;uniform vec2 lag;uniform float clock;uniform float movement;uniform float audio;uniform float lightBoost;uniform float powered;uniform vec4 rotation;uniform float detail;
    const float R=.934375;
    vec3 rotateQ(vec3 p){return p+2.*cross(rotation.xyz,cross(rotation.xyz,p)+rotation.w*p);}
    float dome(vec2 p){return .13*sqrt(max(.025,1.-dot(p,p)/(R*R)));}
@@ -280,56 +280,47 @@ class GelRenderer {
     float h=optics.x+optics.w*dynamic;normal=normalize(vec3(-gradient,1.));world=vec3(p,h);gl_Position=vec4(p,-h*.7,1.);
    }`;
    const meshFragment=header+`in vec3 world;in vec3 normal;out vec4 colour;
-   vec3 displayColour(vec3 c){c=max(c,vec3(0));return mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));}
    float ggx(vec3 n,vec3 l,float rough){vec3 h=normalize(l+vec3(0,0,1));float nh=max(0.,dot(n,h)),a=rough*rough,a2=a*a;return min(64.,a2/(3.14159*pow(nh*nh*(a2-1.)+1.,2.)+.0001));}
    void main(){float r=length(world.xy);if(r>R)discard;vec3 n=normalize(normal);float d=length(world.xy-anchor);
-    float marble=0.;if(detail>.5){marble=sin(world.x*23.+sin(world.y*17.+world.z*12.))*sin(world.y*31.-world.x*9.);n=normalize(n+vec3(dFdx(marble),dFdy(marble),0.)*.08);}
-    vec3 view=vec3(0,0,1),l=normalize(vec3(-.55,.72,.75));float nv=clamp(n.z,.02,1.);
-    float fresnel=.045+.955*pow(1.-nv,5.);float thickness=clamp(.5+world.z*1.8,0.,1.);
-    vec3 base=mix(vec3(.007,.0006,.025),vec3(.043,.003,.105),thickness)*(.94+.06*marble);
-    vec3 reflected=vec3(.60,.36,.78)*ggx(n,l,.18)*.4;if(finishReady<.5)reflected=textureLod(studio,reflect(-view,n),.65).rgb*12.;
-    vec3 c=base*(.45+.65*max(0.,dot(n,l)))+reflected*(.08+1.7*fresnel);
-    c+=vec3(.06,.002,.13)*pow(1.-nv,2.);
+    float marble=0.;if(detail>.5){marble=sin(world.x*23.+sin(world.y*17.+world.z*12.))*sin(world.y*31.-world.x*9.);n=normalize(n+vec3(dFdx(marble),dFdy(marble),0.)*.28);}
+    vec3 view=vec3(0,0,1),l=normalize(vec3(-.55,.72,.75)),l2=normalize(vec3(.8,-.4,.55));
+    float nv=max(.02,n.z),fresnel=.055+.945*pow(1.-nv,5.);
+    float recess=exp(-d*d/.018),thickness=clamp(.5+world.z*1.8,0.,1.);
+    vec3 base=mix(vec3(.006,.0008,.022),vec3(.021,.0015,.085),thickness);
+    base*=.9+.1*marble;
+    vec3 c=base*(.6+.65*max(0.,dot(n,l))+.28*max(0.,dot(n,l2)));
+    c+=vec3(.90,.55,1.1)*ggx(n,l,.18)*.075+vec3(.80,.035,.65)*ggx(n,l2,.22)*.065;
+    // Bounded soft-box reflections provide wet dielectric highlights, not chrome.
+    vec3 refl=reflect(-view,n);float strip=(1.-smoothstep(0.,.28,abs(refl.x+.32)))*smoothstep(-.2,.6,refl.y);
+    float magenta=(1.-smoothstep(0.,.36,abs(refl.y+.52)))*smoothstep(-.1,.8,refl.x);
+    c+=vec3(1.35,.85,1.75)*strip*.95+vec3(1.10,.018,.84)*magenta*.9;
+    c+=vec3(.28,.020,.52)*fresnel*.7;
     if(d<.45){float localWeight=1.-smoothstep(.25,.45,d);vec3 toLight=vec3(anchor,dome(anchor)+.18)-world;float attenuation=localWeight/(1.+dot(toLight,toLight)*24.);
-     float illumination=max(0.,dot(n,normalize(toLight))),pulse=1.+.07*sin(clock*2.1)+.22*lightBoost;
-     c+=powered*vec3(.10,.005,.15)*attenuation*illumination*pulse;
-     c+=powered*vec3(.60,.26,.54)*ggx(n,normalize(toLight),.22)*attenuation*.018*pulse;
-    }
-    c*=1.-.28*exp(-pow(d/.112,4.));c*=1.+lightBoost*.10*exp(-d*d/.12);
+    float illumination=max(0.,dot(n,normalize(toLight)));float pulse=1.+.07*sin(clock*2.1)+.22*lightBoost;
+    c+=powered*vec3(.10,.005,.15)*attenuation*illumination*pulse;
+    c+=powered*vec3(.46,.20,.49)*ggx(n,normalize(toLight),.3)*attenuation*.015*pulse;}
+    c*=1.-.32*exp(-pow(d/.112,4.));c+=base*pow(max(0.,1.-nv),2.)*.15;
+    c*=1.+lightBoost*.10*exp(-d*d/.12);
     if(powered<.5){float grey=dot(c,vec3(.21,.72,.07));c=vec3(grey*.65);}
-    c=c/(1.+c);
-    if(finishReady>.5){
-     // Reference finish in material coordinates; the pressure centre is shared
-     // with the actual mesh. Live normal refraction/lighting keeps it dimensional.
-     vec2 z=world.xy/R,a=anchor/R,v=z-a,den=vec2(1.-dot(a,z),-(a.x*z.y-a.y*z.x));
-     vec2 mapped=vec2(dot(v,den),v.y*den.x-v.x*den.y)/max(dot(den,den),.001);
-     vec2 uv=vec2(.5+.455*mapped.x,.5-.455*mapped.y);
-     uv+=vec2(n.x,-n.y)*.012*(1.-smoothstep(.72,R,r));
-     vec3 film=texture(finish,clamp(uv,vec2(.015),vec2(.985))).rgb;
-     float contact=1.-.10*exp(-pow(d/.105,4.));
-     c=film*contact*(.95+.06*max(0.,dot(n,l)))+c*.20;
-     c*=1.+lightBoost*.12*exp(-d*d/.12);
-     if(powered<.5)c=vec3(dot(c,vec3(.21,.72,.07))*.65);
-    }
-    colour=vec4(displayColour(c),1.-smoothstep(R-.004,R,r));
+    c=c/(1.+c);colour=vec4(pow(max(c,vec3(0)),vec3(1./2.2)),1.-smoothstep(R-.004,R,r));
    }`;
    const orbVertex=header+`layout(location=0)in vec3 position;out vec3 world;out vec3 normal;out vec3 local;
    void main(){local=position;normal=rotateQ(position);world=centre()+normal*orbRadius();gl_Position=vec4(world.xy,-world.z*.7,1.);}`;
    const orbFragment=header+`in vec3 world;in vec3 normal;in vec3 local;out vec4 colour;
-   vec3 displayColour(vec3 c){c=max(c,vec3(0));return mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));}
    float flow(vec3 q){return sin(q.x*8.+sin(q.y*6.+q.z*4.))*cos(q.z*7.-q.y*3.)+.45*sin(q.y*15.+q.x*5.+sin(q.z*11.));}
-   void main(){vec3 n=normalize(normal),q=local;float nv=clamp(n.z,0.,1.),edge=pow(1.-nv,5.);
-    float field=flow(q*1.8+vec3(0,clock*.035,0)),deep=flow(q*.85+vec3(.3,-.6,.9));
-    float vein=clamp((.008-abs(field))/max(fwidth(field),.01)+.5,0.,1.);
-    float finer=flow(q*2.9+vec3(.2,.7,.1));float branch=clamp((.004-abs(finer))/max(fwidth(finer),.01)+.5,0.,1.)*smoothstep(-.35,.6,field);
-    vec3 reflected=textureLod(studio,reflect(vec3(0,0,-1),n),.35).rgb*12.;
-    float fresnel=.055+.945*pow(1.-nv,5.);float lit=max(0.,dot(n,normalize(vec3(-.5,.7,1.))));
-    vec3 transmission=mix(vec3(.065,.008,.095),vec3(.38,.08,.30),.5+.5*sin(deep*2.+field));
-    vec3 c=transmission*(.5+.6*lit)+reflected*(.08+fresnel*1.7);
-    float core=pow(nv,48.)*(7.5+1.2*sin(deep*2.));
-    c+=powered*(vec3(1.,.64,.92)*core+vec3(1.,.67,.94)*(1.5*vein+.45*branch)+vec3(1.,.58,.92)*edge*3.5)*(1.+audio*.25);
-    if(powered<.5){vec3 h=normalize(normalize(vec3(-.5,.7,1.))+vec3(0,0,1));c=vec3(.035+.09*lit+.16*pow(max(0.,dot(n,h)),60.));}
-    c=c/(1.+c);colour=vec4(displayColour(c),smoothstep(0.,.16,nv));
+   void main(){vec3 n=normalize(normal),q=local;float nv=max(0.,n.z),f=pow(1.-nv,3.);float field=flow(q*1.25+vec3(0,clock*.035,0));
+    float deep=flow(q*.85+vec3(.3,-.6,.9));float v=abs(field),width=max(fwidth(field)*1.1,.015);
+    float vein=1.-smoothstep(.018,.018+width,v);float branch=(1.-smoothstep(.02,.06,abs(flow(q*2.4+vec3(.2,.7,.1)))))*(.3+.7*smoothstep(-.2,.6,field));
+    float plasma=.5+.5*sin(field*3.+deep*2.-clock*.22);float lit=max(0.,dot(n,normalize(vec3(-.5,.7,1.))));
+    vec3 c=mix(vec3(.08,.009,.14),vec3(.65,.075,.45),plasma)*(.5+.7*lit);
+    c+=vec3(.26,.035,.27)*smoothstep(-.5,.7,deep)*(1.-f)*.7;
+    c+=(vec3(.85,.47,.78)*vein+vec3(.5,.18,.67)*branch*.5)*(1.+audio*.35)*powered;
+    c+=vec3(.85,.32,.82)*f*1.3*powered;
+    vec3 h=normalize(normalize(vec3(-.5,.7,1.))+vec3(0,0,1));c+=vec3(1.1,.85,1.0)*pow(max(0.,dot(n,h)),32.)*.9;
+    c+=vec3(.20,.025,.16)*exp(-dot(q.xy+vec2(.15,-.12),q.xy+vec2(.15,-.12))*3.)*(1.-f)*powered;
+    vec3 reflectDir=reflect(vec3(0,0,-1),n);float glass=exp(-pow((reflectDir.x+.25+.12*sin(q.y*14.))/.09,2.))*smoothstep(-.1,.5,reflectDir.y);c+=vec3(.9,.66,.85)*glass*.65;
+    if(powered<.5)c=vec3(.035+.09*lit+.16*pow(max(0.,dot(n,h)),60.));
+    c=c/(1.+c);colour=vec4(pow(c,vec3(1./2.2)),smoothstep(0.,.16,nv));
    }`;
    const arcVertex=header+`layout(location=0)in vec3 position;out float side;out float along;out float branch;out vec2 location;
    void main(){float t=position.x,k=position.z,family=mod(k,6.),fork=step(6.,k),a=family*2.399963;side=position.y;along=t;branch=k;
@@ -345,7 +336,7 @@ class GelRenderer {
    const particleVertex=header+`layout(location=0)in vec3 position;out float fade;out vec2 location;
     void main(){float t=fract(clock*.065+position.x*.618034),a=position.x*2.39996+clock*.12;vec3 p=rotateQ(vec3(cos(a)*(1.15+t*.9),sin(a)*(1.15+t*.9),.9+.5*sin(a)))*orbRadius();vec3 world=centre()+p;location=world.xy;fade=sin(t*3.14159);gl_Position=vec4(world.xy,-world.z*.7,1.);gl_PointSize=2.2+audio;}`;
    const particleFragment=header+`in float fade;in vec2 location;out vec4 colour;void main(){float alpha=exp(-dot(gl_PointCoord-.5,gl_PointCoord-.5)*18.)*fade*.45*(1.-smoothstep(R-.03,R-.008,length(location)));colour=vec4(.92,.5,1.,alpha);}`;
-   const program=(v,f)=>{const shaders=[];const p=gl.createProgram();this.programs.push(p);for(const[type,source]of[[gl.VERTEX_SHADER,v],[gl.FRAGMENT_SHADER,f]]){const s=gl.createShader(type);shaders.push(s);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const error=gl.getShaderInfoLog(s);gl.deleteShader(s);for(const old of shaders)if(old!==s)gl.deleteShader(old);throw Error(error);}gl.attachShader(p,s);}gl.linkProgram(p);for(const s of shaders)gl.deleteShader(s);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));const uniforms={};for(const n of ['anchor','lag','clock','movement','audio','lightBoost','powered','rotation','displacement','detail','studio','finish','finishReady'])uniforms[n]=gl.getUniformLocation(p,n);return{p,uniforms};};
+   const program=(v,f)=>{const shaders=[];const p=gl.createProgram();this.programs.push(p);for(const[type,source]of[[gl.VERTEX_SHADER,v],[gl.FRAGMENT_SHADER,f]]){const s=gl.createShader(type);shaders.push(s);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const error=gl.getShaderInfoLog(s);gl.deleteShader(s);for(const old of shaders)if(old!==s)gl.deleteShader(old);throw Error(error);}gl.attachShader(p,s);}gl.linkProgram(p);for(const s of shaders)gl.deleteShader(s);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));const uniforms={};for(const n of ['anchor','lag','clock','movement','audio','lightBoost','powered','rotation','displacement','detail'])uniforms[n]=gl.getUniformLocation(p,n);return{p,uniforms};};
    const geometry=(v,i,optics=null)=>{const vao=gl.createVertexArray();this.vaos.push(vao);gl.bindVertexArray(vao);const b=gl.createBuffer(),ib=gl.createBuffer();this.buffers.push(b,ib);gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(v),gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(i),gl.STATIC_DRAW);if(optics){const o=gl.createBuffer();this.buffers.push(o);gl.bindBuffer(gl.ARRAY_BUFFER,o);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(optics),gl.STATIC_DRAW);for(let n=1;n<=2;n++){gl.enableVertexAttribArray(n);gl.vertexAttribPointer(n,4,gl.FLOAT,false,32,(n-1)*16);}}return{vao,count:i.length};};
    this.material=program(meshVertex,meshFragment);this.orb=program(orbVertex,orbFragment);this.arcs=program(arcVertex,arcFragment);this.particles=program(particleVertex,particleFragment);
    const vertices=[],indices=[],optics=[],rings=64,sectors=128;
@@ -358,33 +349,14 @@ class GelRenderer {
    this.orbMesh=geometry(vertices,indices);vertices.length=indices.length=0;
    for(let k=0;k<10;k++){const base=vertices.length/3;for(let n=0;n<=32;n++)for(const s of[-1,1])vertices.push(n/32,s,k);for(let n=0;n<32;n++){const a=base+n*2;indices.push(a,a+1,a+2,a+1,a+3,a+2);}}
    this.arcMesh=geometry(vertices,indices);vertices.length=indices.length=0;for(let k=0;k<20;k++){vertices.push(k,0,0);indices.push(k);}this.particleMesh=geometry(vertices,indices);
-   // A small linear-light studio cubemap, generated once and shared by both
-   // materials. Mip levels soften reflections without a blur/render pass.
-   this.studio=gl.createTexture();this.textures.push(this.studio);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_CUBE_MAP,this.studio);
-   const size=128,pixels=new Uint8Array(size*size*4),encode=v=>{v=Math.max(0,Math.min(1,v/12));return Math.round(255*(v<=.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-.055));};
-   const lamps=[[-.55,.65,.65,.62,.12,10.,.94,.88,1.],[.72,-.28,.62,.16,.62,6.,1.,.025,.62],[-.62,-.52,.55,.38,.07,7.,.60,.38,1.],[.28,.67,-.69,.55,.18,4.,.34,.025,1.]];
-   for(const lamp of lamps){const n=Math.hypot(lamp[0],lamp[1],lamp[2]);lamp[0]/=n;lamp[1]/=n;lamp[2]/=n;const t=Math.hypot(lamp[1],lamp[0]);lamp.push(lamp[1]/t,-lamp[0]/t,0);lamp.push(lamp[2]*lamp[0]/t,lamp[2]*lamp[1]/t,-t);}
-   for(let face=0;face<6;face++){
-    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-     const u=(x+.5)/size*2-1,v=(y+.5)/size*2-1;let dx,dy,dz;
-     if(face===0){dx=1;dy=-v;dz=-u;}else if(face===1){dx=-1;dy=-v;dz=u;}else if(face===2){dx=u;dy=1;dz=v;}else if(face===3){dx=u;dy=-1;dz=-v;}else if(face===4){dx=u;dy=-v;dz=1;}else{dx=-u;dy=-v;dz=-1;}
-     const n=Math.hypot(dx,dy,dz);dx/=n;dy/=n;dz/=n;let red=.025,green=.002,blue=.065;
-     for(const l of lamps){const facing=dx*l[0]+dy*l[1]+dz*l[2];if(facing<=0)continue;const a=(dx*l[9]+dy*l[10]+dz*l[11])/l[3],b=(dx*l[12]+dy*l[13]+dz*l[14])/l[4];const light=Math.exp(-Math.pow(a*a+b*b,1.35))*Math.min(1,facing*2)*l[5];red+=light*l[6];green+=light*l[7];blue+=light*l[8];}
-     const i=(y*size+x)*4;pixels[i]=encode(red);pixels[i+1]=encode(green);pixels[i+2]=encode(blue);pixels[i+3]=255;
-    }
-    gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+face,0,gl.SRGB8_ALPHA8,size,size,0,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
-   }
-   gl.generateMipmap(gl.TEXTURE_CUBE_MAP);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_CUBE_MAP,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
    this.displacement=gl.createTexture();this.textures.push(this.displacement);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.displacement);const filter=gl.getExtension('OES_texture_float_linear')?gl.LINEAR:gl.NEAREST;gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filter);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filter);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texImage2D(gl.TEXTURE_2D,0,gl.R32F,64,64,0,gl.RED,gl.FLOAT,null);
-   this.finishLevels=new Uint32Array(256);for(let i=0;i<256;i++){const v=i/255;this.finishLevels[i]=Math.round((v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4))*1023);}this.finish=gl.createTexture();this.textures.push(this.finish);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,this.finish);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB10_A2,1,1,0,gl.RGBA,gl.UNSIGNED_INT_2_10_10_10_REV,new Uint32Array([0xc0000000]));gl.generateMipmap(gl.TEXTURE_2D);this.finishReady=false;
    if(gl.getError()!==gl.NO_ERROR)throw Error('GPU resource initialisation failed');this.ready=true;surface.dataset.renderer='webgl2-mesh';
   }catch(error){surface.dataset.rendererError=String(error.message);this.dispose();}
  }
  render(image,gel,idleTime=0,idleAmount=0,reactiveGain=0,reactiveLight=reactiveGain){
   const gl=this.gl;if(!gl||gl.isContextLost())return false;
   gl.viewport(0,0,gl.canvas.width,gl.canvas.height);gl.clearColor(0,0,0,0);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
-  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,this.finish);if(!this.finishReady&&!this.finishFailed&&image.complete&&image.naturalWidth){try{const c=document.createElement('canvas');c.width=image.naturalWidth;c.height=image.naturalHeight;const cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(image,0,0);const source=cx.getImageData(0,0,c.width,c.height).data,data=new Uint32Array(source.length/4),table=this.finishLevels;for(let i=0,j=0;i<source.length;i+=4,j++)data[j]=table[source[i]]|(table[source[i+1]]<<10)|(table[source[i+2]]<<20)|0xc0000000;gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB10_A2,c.width,c.height,0,gl.RGBA,gl.UNSIGNED_INT_2_10_10_10_REV,data);gl.generateMipmap(gl.TEXTURE_2D);c.width=c.height=0;this.finishReady=true;}catch(error){this.finishFailed=true;gl.canvas.dataset.materialError=String(error.message);}}
-  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_CUBE_MAP,this.studio);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.displacement);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.displacement);
   if(this.normalField!==gel||this.normalRevision!==gel.revision){gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,64,64,gl.RED,gl.FLOAT,gel.h);this.normalField=gel;this.normalRevision=gel.revision;}
   const on=engineIsOn()?1:0,angle=idleTime*.26,half=angle*.5,s=Math.sin(half);this.rotation[0]=.32/Math.sqrt(.9986)*s;this.rotation[1]=.81/Math.sqrt(.9986)*s;this.rotation[2]=.49/Math.sqrt(.9986)*s;this.rotation[3]=Math.cos(half);
   this.lastAnchor[0]=px*.84375;this.lastAnchor[1]=-py*.84375;
@@ -395,7 +367,7 @@ class GelRenderer {
   gl.disable(gl.BLEND);gl.bindVertexArray(null);return true;
  }
  frameTime(seconds){this.frameAverage+=.06*(Math.min(.25,Math.max(0,seconds))-this.frameAverage);if(this.frameAverage>.045)this.detail=0;else if(this.frameAverage<.028)this.detail=1;}
- draw(program,mesh,mode=4,count=mesh.count){const gl=this.gl,on=this.on,idleTime=this.time,idleAmount=this.amount,reactiveGain=this.gain,reactiveLight=this.light,lx=this.lx,ly=this.ly;gl.useProgram(program.p);const u=program.uniforms;gl.uniform2fv(u.anchor,this.lastAnchor);gl.uniform2f(u.lag,lx,ly);gl.uniform1f(u.clock,idleTime);gl.uniform1f(u.movement,idleAmount);gl.uniform1f(u.audio,Math.max(0,Math.min(1,reactiveGain)));gl.uniform1f(u.lightBoost,Math.max(0,Math.min(1,reactiveLight)));gl.uniform1f(u.powered,on);gl.uniform4fv(u.rotation,this.rotation);gl.uniform1i(u.displacement,0);gl.uniform1f(u.detail,this.detail);gl.uniform1i(u.studio,1);gl.uniform1i(u.finish,2);gl.uniform1f(u.finishReady,this.finishReady?1:0);gl.bindVertexArray(mesh.vao);gl.drawElements(mode,count,gl.UNSIGNED_SHORT,0);}
+ draw(program,mesh,mode=4,count=mesh.count){const gl=this.gl,on=this.on,idleTime=this.time,idleAmount=this.amount,reactiveGain=this.gain,reactiveLight=this.light,lx=this.lx,ly=this.ly;gl.useProgram(program.p);const u=program.uniforms;gl.uniform2fv(u.anchor,this.lastAnchor);gl.uniform2f(u.lag,lx,ly);gl.uniform1f(u.clock,idleTime);gl.uniform1f(u.movement,idleAmount);gl.uniform1f(u.audio,Math.max(0,Math.min(1,reactiveGain)));gl.uniform1f(u.lightBoost,Math.max(0,Math.min(1,reactiveLight)));gl.uniform1f(u.powered,on);gl.uniform4fv(u.rotation,this.rotation);gl.uniform1i(u.displacement,0);gl.uniform1f(u.detail,this.detail);gl.bindVertexArray(mesh.vao);gl.drawElements(mode,count,gl.UNSIGNED_SHORT,0);}
  dispose(){const gl=this.gl;if(gl&&!gl.isContextLost()){gl.useProgram(null);gl.bindVertexArray(null);gl.bindTexture(gl.TEXTURE_2D,null);for(const b of this.buffers)gl.deleteBuffer(b);for(const p of this.programs)gl.deleteProgram(p);for(const v of this.vaos)gl.deleteVertexArray(v);for(const t of this.textures)gl.deleteTexture(t);}this.buffers.length=this.programs.length=this.vaos.length=this.textures.length=0;this.gl=null;this.ready=false;}
 }
 </script>
