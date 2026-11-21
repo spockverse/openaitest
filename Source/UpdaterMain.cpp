@@ -91,20 +91,16 @@ int apply(const juce::StringArray& args)
     const auto deadline=juce::Time::getMillisecondCounterHiRes()+3600000.;
     while(!unused(WubrotUpdates::moduleFile(p.target))){if(cancelled()){report(p.work,"cancelled");return 0;}if(juce::Time::getMillisecondCounterHiRes()>deadline)return fail("Another application is still using WUBROT. Close it and retry the update.");Sleep(500);}
     if(cancelled()){report(p.work,"cancelled");return 0;}
-    // Deny new reads/loads of the old image during the atomic directory swap.
-    Handle image;
-    const auto acquireImage=[&]()->juce::Result{image.value=CreateFileW(WubrotUpdates::moduleFile(p.target).getFullPathName().toWideCharPointer(),GENERIC_READ|DELETE,FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    const auto verifyImage=[&]()->juce::Result{
+        // Lock against writes while checking the exact installed image. Close
+        // this handle before renaming its parent: Windows forbids that rename
+        // with an open child handle, even when FILE_SHARE_DELETE is specified.
+        Handle image=denyWrites(WubrotUpdates::moduleFile(p.target));
         if(!image.valid())return juce::Result::fail("WUBROT is still in use by another application.");
-        // Check the exact locked image, closing the race between backup and swap.
-        LARGE_INTEGER length{};if(!GetFileSizeEx(image.value,&length)||length.QuadPart<=0||length.QuadPart>128*1024*1024){image.reset();return juce::Result::fail("Cannot verify the installed plugin.");}
-        Handle mapping(CreateFileMappingW(image.value,nullptr,PAGE_READONLY,0,0,nullptr));
-        const auto* bytes=mapping.valid()?MapViewOfFile(mapping.value,FILE_MAP_READ,0,0,0):nullptr;
-        if(!bytes){image.reset();return juce::Result::fail("Cannot verify the installed plugin.");}
-        const auto digest=juce::SHA256(bytes,static_cast<size_t>(length.QuadPart)).toHexString();UnmapViewOfFile(bytes);
-        if(digest!=p.installedSha256){image.reset();return juce::Result::fail("The installed plugin changed. No files were replaced.");}
+        if(WubrotUpdates::hashFile(WubrotUpdates::moduleFile(p.target))!=p.installedSha256)return juce::Result::fail("The installed plugin changed. No files were replaced.");
         return juce::Result::ok();};
     Handle archive=denyWrites(p.zip);if(!archive.valid())return fail("Cannot open the downloaded update.");
-    report(p.work,"installing");const auto result=WubrotUpdates::applyPackage(p,{}, {},acquireImage,[&]{image.reset();});if(result.failed())return fail(result.getErrorMessage());
+    report(p.work,"installing");const auto result=WubrotUpdates::applyPackage(p,{}, {},verifyImage);if(result.failed())return fail(result.getErrorMessage());
     report(p.work,"completed");archive.reset();p.zip.deleteFile();if(notify)MessageBoxW(nullptr,("WUBROT has been updated to v"+p.version+". You can reopen your DAW.").toWideCharPointer(),L"WUBROT update complete",MB_OK|MB_ICONINFORMATION);return 0;
 }
 }
