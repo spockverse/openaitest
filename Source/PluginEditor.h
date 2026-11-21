@@ -30,7 +30,7 @@ private:
     void applyEditorSize();
     void timerCallback() override;
     WubrotUpdates::Session* updates=nullptr;
-    bool updateSent=false;juce::String lastUpdateProgress;
+    bool updateSent=false;int lastUpdateRevision=-1;juce::String lastUpdateProgress,lastUpdateCheck;
     std::function<bool(const juce::String&)> updateLauncher=[](const juce::String& url){return juce::URL(url).launchInDefaultBrowser();};
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;

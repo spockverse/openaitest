@@ -19,6 +19,7 @@ public:
     virtual ~Transport() = default;
     virtual juce::String fetch() = 0;
     virtual void cancel() = 0;
+    virtual int statusCode() const { return 200; }
 };
 class DownloadTask
 {
@@ -38,6 +39,8 @@ public:
     ~Session() override;
     static Session& shared(const juce::String& installed);
     void checkOnce();
+    void checkNow();
+    juce::var checkStatus();
     bool finished() const noexcept { return done.load(std::memory_order_acquire); }
     juce::var claim(const void* editor);
     void release(const void* editor);
@@ -59,6 +62,7 @@ private:
     std::optional<Release> result;
     const void* owner = nullptr;
     bool announced = false, downloadDismissed=false;
+    int checkRevision=0;juce::String checkPhase="idle",checkMessage="Check for the latest stable WUBROT release.";
     DownloadFactory factory;
     std::unique_ptr<DownloadTask> task;
 };

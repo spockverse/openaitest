@@ -52,7 +52,8 @@ void WubrotEditor::handleEvent(const juce::var& event)
     const auto type = event["type"].toString();
     if(type=="update"&&updates){
         const auto operation=event["operation"].toString(),version=event["version"].toString();
-        if(operation=="shown")updates->shown(this,version);
+        if(operation=="check"){updates->checkNow();browser->emitEventIfBrowserIsVisible("wubrotUpdateCheck",updates->checkStatus());}
+        else if(operation=="shown")updates->shown(this,version);
         else if(operation=="later")updates->later(this,version);
         else if(operation=="reopen"){
             const auto notice=updates->reopen(this,version);if(notice.isObject())browser->emitEventIfBrowserIsVisible("wubrotUpdate",notice);
@@ -110,7 +111,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { frontendReady=true;updateSent=false;lastUpdateProgress.clear();if(!updates)updates=&WubrotUpdates::Session::shared(WUBROT_CURRENT_VERSION);updates->checkOnce();visualBridgeReady=false;waveformSent=false;xyWriteAck=0;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "ready") { frontendReady=true;updateSent=false;lastUpdateCheck.clear();lastUpdateProgress.clear();if(!updates)updates=&WubrotUpdates::Session::shared(WUBROT_CURRENT_VERSION);updates->checkOnce();visualBridgeReady=false;waveformSent=false;xyWriteAck=0;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
     else if (type == "visualReady")
     {
         // The page has installed its listener AND applied its first power/state
@@ -153,6 +154,8 @@ void WubrotEditor::timerCallback()
         }
     }
     if(++uiTicks%6==0&&updates){
+        const auto check=updates->checkStatus();const int revision=check["revision"];if(revision!=lastUpdateRevision){lastUpdateRevision=revision;updateSent=false;}
+        const auto checked=juce::JSON::toString(check,true);if(checked!=lastUpdateCheck){lastUpdateCheck=checked;browser->emitEventIfBrowserIsVisible("wubrotUpdateCheck",check);}
         if(!updateSent){const auto notice=updates->claim(this);if(notice.isObject()){browser->emitEventIfBrowserIsVisible("wubrotUpdate",notice);updateSent=true;}}
         const auto progress=updates->progress(this);if(progress.isObject()){const auto json=juce::JSON::toString(progress,true);if(json!=lastUpdateProgress){lastUpdateProgress=json;browser->emitEventIfBrowserIsVisible("wubrotUpdateProgress",progress);}}
     }

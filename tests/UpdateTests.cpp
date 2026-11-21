@@ -11,9 +11,10 @@ static juce::String fixture(const juce::String& tag="v1.2.0")
 }
 struct Fake final:Transport
 {
-    std::atomic<int> calls{0};std::atomic<bool> cancelled{false},block{false};juce::String body=fixture();std::thread::id thread;
+    std::atomic<int> calls{0};std::atomic<bool> cancelled{false},block{false};juce::String body=fixture();std::thread::id thread;int code=200;
     juce::String fetch()override{++calls;thread=std::this_thread::get_id();while(block&&!cancelled)juce::Thread::sleep(1);return body;}
     void cancel()override{cancelled=true;}
+    int statusCode()const override{return code;}
 };
 struct Download final:DownloadTask
 {
@@ -47,6 +48,10 @@ int main()
     need(!session.reopen(&a,"9.9.9").isObject(),"Badge accepted a stale version");need(bool(session.reopen(&a,"1.2.0")["reopened"]),"Minimized notice could not reopen");need(!session.reopen(&b,"1.2.0").isObject(),"Two editors reopened one update menu");need(session.download(&a,"1.2.0").wasOk(),"Reopened update lost download ownership");session.cancel(&a,"1.2.0");session.later(&a,"1.2.0");session.release(&a);need(session.claim(&b)["phase"].toString()=="minimized","Editor reopen lost minimized notice");
     {auto blocked=std::make_unique<Fake>();blocked->block=true;Session closing("1.0.0",std::move(blocked));closing.checkOnce();} // Cancellation must release/join the worker.
     {auto offline=std::make_unique<Fake>();offline->body={};Session quiet("1.0.0",std::move(offline));quiet.checkOnce();wait(quiet);need(!quiet.claim(&a).isObject(),"Offline check interrupted UI");}
+    {auto backend=std::make_unique<Fake>();auto* source=backend.get();source->body=fixture("v1.0.0");Session manual("1.0.0",std::move(backend));manual.checkOnce();wait(manual);need(manual.checkStatus()["phase"].toString()=="current","Installed version incorrectly offered as an update");
+        while(!manual.finished())juce::Thread::sleep(1);juce::Thread::sleep(2);source->body={};source->code=0;manual.checkNow();manual.checkNow();wait(manual);need(source->calls==2&&manual.checkStatus()["phase"].toString()=="failed","Manual check failure or deduplication incorrect");
+        juce::Thread::sleep(2);source->body=fixture("v1.3.0");source->code=200;manual.checkNow();wait(manual);need(manual.claim(&a)["version"].toString()=="1.3.0","Manual retry did not recover and find a newer release");manual.later(&a,"1.3.0");
+        juce::Thread::sleep(2);source->body={};source->code=404;manual.checkNow();wait(manual);need(manual.checkStatus()["phase"].toString()=="current"&&!manual.claim(&a).isObject(),"No published releases incorrectly offered an update");}
     const auto root=juce::File::createTempFile("-WubrotUpdates");root.deleteFile();root.createDirectory();struct Cleanup{juce::File f;~Cleanup(){f.deleteRecursively();}}cleanup{root};
     auto make=[&](juce::String extra={}){const auto work=root.getChildFile(juce::Uuid().toString());work.createDirectory();const auto target=root.getChildFile("installed").getChildFile("WUBROT.vst3");target.deleteRecursively();moduleFile(target).getParentDirectory().createDirectory();moduleFile(target).replaceWithText("old");const auto archive=work.getChildFile("update.zip");zip(archive,extra);return Package{archive,target,work,"1.2.0",hashFile(archive),hashFile(moduleFile(target))};};
     auto p=make();need(validateArchive(p).wasOk(),"Valid ZIP rejected");auto validate=[](const juce::File& f,const juce::String&){return f.loadFileAsString()=="new"?juce::Result::ok():juce::Result::fail("bad module");};

@@ -106,17 +106,20 @@ private:
     {
         if(!updateFixture){
             const auto major=juce::String(WUBROT_CURRENT_VERSION).upToFirstOccurrenceOf(".",false,false).getIntValue();updateVersion=juce::String(major+1)+".0.0";
-            updateFixture=std::make_unique<WubrotUpdates::Session>(WUBROT_CURRENT_VERSION,std::make_unique<ReleaseFixture>(updateVersion),true,[this](const WubrotUpdates::Release& release){auto p=std::make_unique<ProgressFixture>(release.version);progressFixture=p.get();return p;});
+            auto source=std::make_unique<ReleaseFixture>(WUBROT_CURRENT_VERSION);releaseFixture=source.get();
+            updateFixture=std::make_unique<WubrotUpdates::Session>(WUBROT_CURRENT_VERSION,std::move(source),true,[this](const WubrotUpdates::Release& release){auto p=std::make_unique<ProgressFixture>(release.version);progressFixture=p.get();return p;});
             if(editor.updates)editor.updates->release(&editor);editor.updates=updateFixture.get();editor.updateSent=false;editor.lastUpdateProgress.clear();
             editor.updateLauncher=[this](const juce::String& url){updateNotes=url;return true;};updateFixture->checkOnce();return;
         }
-        evaluate(R"JS(JSON.stringify({open:!document.getElementById('updateLayer').hidden,percent:document.getElementById('updatePercent').textContent,intro:document.getElementById('updateIntro').textContent,inert:document.querySelector('.grid').inert,badge:!document.getElementById('updateBadge').hidden}))JS",[this](juce::var state){
-            if(updateStage==0&&bool(state["open"])) {updateStage=1;evaluate("document.getElementById('updateNotes').click();JSON.stringify({ok:true})",[](juce::var){});}
+        evaluate(R"JS(JSON.stringify({open:!document.getElementById('updateLayer').hidden,percent:document.getElementById('updatePercent').textContent,intro:document.getElementById('updateIntro').textContent,inert:document.querySelector('.grid').inert,badge:!document.getElementById('updateBadge').hidden,menu:!document.getElementById('updateMenu').hidden,check:document.getElementById('updateCheckStatus').textContent}))JS",[this](juce::var state){
+            if(updateStage==-2&&bool(state["badge"])&&state["check"].toString().contains("up to date")){releaseFixture->tag=updateVersion;updateStage=-1;evaluate("document.getElementById('updateBadge').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==-1&&bool(state["menu"])){updateStage=0;evaluate("document.getElementById('updateCheck').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==0&&bool(state["open"])) {updateStage=1;evaluate("document.getElementById('updateNotes').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==1&&updateNotes.endsWith("/releases/tag/v"+updateVersion)){updateStage=2;evaluate("document.getElementById('updateNow').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==2&&state["percent"].toString()=="60%"&&progressFixture&&progressFixture->starts==1){updateStage=3;evaluate("document.getElementById('updateLater').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==3&&!bool(state["open"])&&!bool(state["inert"])&&bool(state["badge"])&&progressFixture->cancels==1){updateStage=4;progressFixture=nullptr;evaluate("document.getElementById('updateBadge').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==4&&bool(state["open"])&&!bool(state["badge"])){updateStage=5;evaluate("document.getElementById('updateLater').click();JSON.stringify({ok:true})",[](juce::var){});}
-            else if(updateStage==5&&!bool(state["open"])&&!bool(state["inert"])&&bool(state["badge"])){std::cout<<"PASS actual native update notice -> notes link, download command, byte progress, cancellation, minimized badge and reopen\n";finish();}
+            else if(updateStage==5&&!bool(state["open"])&&!bool(state["inert"])&&bool(state["badge"])){std::cout<<"PASS actual native update notice -> notes link, download command, byte progress, cancellation, grey-gear manual checking, minimized badge and reopen\n";finish();}
         });
     }
     void timerCallback() override
@@ -195,7 +198,7 @@ private:
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
-    bool xyFinished=false;int updateStage=0;juce::String updateNotes,updateVersion;std::unique_ptr<WubrotUpdates::Session> updateFixture;ProgressFixture* progressFixture=nullptr;
+    bool xyFinished=false;int updateStage=-2;ReleaseFixture* releaseFixture=nullptr;juce::String updateNotes,updateVersion;std::unique_ptr<WubrotUpdates::Session> updateFixture;ProgressFixture* progressFixture=nullptr;
     bool presetFinished=false,xySent=false;int xyStage=0,xyAck=0;juce::MemoryBlock xyProject;juce::Array<juce::var> xyMetrics;
     bool visualFinished=false,presetProbeStarted=false;juce::var presetMetrics;
     bool pending=false,installed=false,driveBridgeSent=false,mutateBridgeSent=false;int mutateBridgeStage=0;juce::Array<juce::var> mutateBridgeValues;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;

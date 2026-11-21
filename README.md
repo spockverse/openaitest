@@ -96,7 +96,7 @@ Windows development builds are unsigned. Signing remains a release task.
 
 ## In-plugin updates
 
-This build checks the repository's latest **public stable GitHub Release** once per DAW process session when an editor opens. Development Actions artifacts, drafts, prereleases, unavailable networks and rate limits do not produce prompts. LATER collapses the notice into a glowing update badge beside the preset selector. Click it to reopen the update menu; reopening an editor in the same session keeps the badge minimized. Existing users must install an updater-capable build once.
+This build checks the repository's latest **public stable GitHub Release** once per DAW process session when an editor opens. Development Actions artifacts, drafts, prereleases, unavailable networks and rate limits do not produce prompts. LATER collapses the notice into a glowing update badge beside the preset selector. Click it to reopen the update menu; reopening an editor in the same session keeps the badge minimized. The gear remains grey when no update is known or a check fails; open it and choose CHECK FOR UPDATES to retry. Existing users must install an updater-capable build once.
 
 UPDATE NOW downloads inside WUBROT, shows actual byte progress, and checks the asset's GitHub SHA-256 digest and archive paths/size. CANCEL leaves the installed version alone. A bundled helper waits for the DAW to exit before swapping the complete bundle, retaining a rollback copy. Windows may request administrator approval for protected installation folders. Wait for its completion confirmation before reopening the DAW. No running DAW is terminated. Projects, user presets and embedded DNA outside the bundle are untouched.
 

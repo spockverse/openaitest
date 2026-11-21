@@ -67,32 +67,31 @@ juce::String summary(const juce::String& body)
 class GitHubTransport final : public Transport
 {
 public:
-    GitHubTransport() : stream(juce::URL("https://api.github.com/repos/spockverse/openaitest/releases/latest"),false)
-    {
-        stream.withConnectionTimeout(3500).withNumRedirectsToFollow(0)
-            .withExtraHeaders("Accept: application/vnd.github+json\r\nUser-Agent: WUBROT-Update-Checker\r\nX-GitHub-Api-Version: 2022-11-28\r\n");
-    }
     juce::String fetch() override
     {
-        const auto deadline=juce::Time::getMillisecondCounterHiRes()+8000.;
-        if (!stream.connect(nullptr) || stream.getStatusCode()!=200) return {};
+        auto next=std::make_unique<juce::WebInputStream>(juce::URL("https://api.github.com/repos/spockverse/openaitest/releases/latest"),false);
+        next->withConnectionTimeout(3500).withNumRedirectsToFollow(0)
+            .withExtraHeaders("Accept: application/vnd.github+json\r\nUser-Agent: WUBROT-Update-Checker\r\nX-GitHub-Api-Version: 2022-11-28\r\n");
+        juce::WebInputStream* input=nullptr;{const juce::ScopedLock guard(lock);if(cancelled.load())return {};stream=std::move(next);input=stream.get();}
+        status=0;const auto deadline=juce::Time::getMillisecondCounterHiRes()+8000.;
+        const bool connected=input->connect(nullptr);status=input->getStatusCode();
+        if(!connected||status!=200)return {};
         constexpr int limit=256*1024;
-        if(stream.getTotalLength()>limit) return {};
-        juce::MemoryOutputStream data;
-        std::array<char,4096> bytes {};
-        while(!stream.isExhausted() && !cancelled.load() && juce::Time::getMillisecondCounterHiRes()<deadline) {
-            const auto n=stream.read(bytes.data(),static_cast<int>(bytes.size()));
-            if(n<=0) break;
-            if(data.getDataSize()+static_cast<size_t>(n)>limit) return {};
+        if(input->getTotalLength()>limit)return {};
+        juce::MemoryOutputStream data;std::array<char,4096> bytes {};
+        while(!input->isExhausted()&&!cancelled.load()&&juce::Time::getMillisecondCounterHiRes()<deadline){
+            const auto n=input->read(bytes.data(),static_cast<int>(bytes.size()));if(n<=0)break;
+            if(data.getDataSize()+static_cast<size_t>(n)>limit)return {};
             data.write(bytes.data(),static_cast<size_t>(n));
         }
-        if(cancelled.load() || stream.isError() || !stream.isExhausted()) return {};
+        if(cancelled.load()||input->isError()||!input->isExhausted())return {};
         return data.toUTF8();
     }
-    void cancel() override { cancelled.store(true); stream.cancel(); }
+    void cancel() override {cancelled.store(true);const juce::ScopedLock guard(lock);if(stream)stream->cancel();}
+    int statusCode() const override {return status;}
 private:
-    juce::WebInputStream stream;
-    std::atomic<bool> cancelled {false};
+    juce::CriticalSection lock;std::unique_ptr<juce::WebInputStream> stream;
+    std::atomic<bool> cancelled {false};int status=0;
 };
 }
 juce::var Release::notice(const juce::String& installed) const
@@ -241,14 +240,37 @@ Session& Session::shared(const juce::String& installed)
 }
 void Session::checkOnce()
 {
-    if(started.exchange(true)) return;
-    if(!enabled) {done.store(true,std::memory_order_release);return;}
-    if(!startThread()) done.store(true,std::memory_order_release);
+    if(started.exchange(true))return;
+    if(!enabled){done.store(true,std::memory_order_release);return;}
+    {const juce::ScopedLock guard(lock);checkPhase="checking";checkMessage="Checking GitHub for a stable update…";}
+    if(!startThread()){const juce::ScopedLock guard(lock);checkPhase="failed";checkMessage="Could not start the update check. Please retry.";done.store(true,std::memory_order_release);}
+}
+void Session::checkNow()
+{
+    const juce::ScopedLock guard(lock);
+    if(isThreadRunning())return;
+    if(owner||(task&&task->snapshot()["phase"].toString()!="failed"&&task->snapshot()["phase"].toString()!="cancelled")){checkPhase="busy";checkMessage="Finish or close the current update menu before checking again.";return;}
+    task.reset();
+    started.store(true);done.store(false,std::memory_order_release);checkPhase="checking";checkMessage="Checking GitHub for a stable update…";
+    if(!startThread()){checkPhase="failed";checkMessage="Could not start the update check. Please retry.";done.store(true,std::memory_order_release);}
+}
+juce::var Session::checkStatus()
+{
+    const juce::ScopedLock guard(lock);auto data=std::make_unique<juce::DynamicObject>();data->setProperty("phase",checkPhase);data->setProperty("message",checkMessage);data->setProperty("installed",installed);data->setProperty("revision",checkRevision);return juce::var(data.release());
 }
 void Session::run()
 {
-    std::optional<Release> candidate;try{candidate=parseRelease(transport->fetch(),installed);}catch(...){ }
-    {const juce::ScopedLock guard(lock);if(!threadShouldExit()) result=std::move(candidate);}
+    std::optional<Release> candidate;juce::String phase="failed",message="Could not check for updates. Check your connection and try again.";
+    try{
+        const auto body=transport->fetch();candidate=parseRelease(body,installed);
+        if(candidate){phase="available";message="WUBROT v"+candidate->version+" is available.";}
+        else if(transport->statusCode()==404){phase="current";message="No stable releases have been published yet.";}
+        else if(body.isNotEmpty()&&transport->statusCode()==200){
+            const auto json=juce::JSON::parse(body);const auto latest=version(json["tag_name"].toString()),current=version(installed);
+            if(latest&&current&&json["draft"].isBool()&&!bool(json["draft"])&&json["prerelease"].isBool()&&!bool(json["prerelease"])&&!latest->prerelease){phase="current";message=(latest->numbers>current->numbers||(latest->numbers==current->numbers&&current->prerelease))?"The latest release has no compatible Windows update package yet.":"You’re up to date. No newer stable update was found.";}
+        }
+    }catch(...){ }
+    {const juce::ScopedLock guard(lock);if(!threadShouldExit()){result=std::move(candidate);checkPhase=phase;checkMessage=message;++checkRevision;owner=nullptr;announced=false;downloadDismissed=false;}}
     done.store(true,std::memory_order_release);
 }
 bool Session::owns(const void* editor,const juce::String& v) const {return owner==editor && result && result->version==v;}
