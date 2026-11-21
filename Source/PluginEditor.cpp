@@ -57,7 +57,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
         else if(operation=="later")updates->later(this,version);
         else if(operation=="reopen"){
             const auto notice=updates->reopen(this,version);if(notice.isObject())browser->emitEventIfBrowserIsVisible("wubrotUpdate",notice);
-            else{auto data=std::make_unique<juce::DynamicObject>();data->setProperty("version",version);data->setProperty("operation",operation);data->setProperty("ok",false);data->setProperty("message","The update menu is open in another WUBROT window.");browser->emitEventIfBrowserIsVisible("wubrotUpdateResult",juce::var(data.release()));}
+            else{auto data=std::make_unique<juce::DynamicObject>();data->setProperty("version",version);data->setProperty("operation",operation);data->setProperty("ok",false);data->setProperty("message","An update check or another update menu is active. Please try again shortly.");browser->emitEventIfBrowserIsVisible("wubrotUpdateResult",juce::var(data.release()));}
         }
         else if(operation=="cancel")updates->cancel(this,version);
         else if(operation=="download"){

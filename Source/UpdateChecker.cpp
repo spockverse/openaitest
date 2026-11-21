@@ -288,7 +288,7 @@ void Session::shown(const void* editor,const juce::String& v) {const juce::Scope
 void Session::later(const void* editor,const juce::String& v) {const juce::ScopedLock guard(lock);if(owns(editor,v)){announced=true;downloadDismissed=true;owner=nullptr;}}
 juce::var Session::reopen(const void* editor,const juce::String& v)
 {
-    const juce::ScopedLock guard(lock);if(!result||result->version!=v||(owner&&owner!=editor))return {};
+    const juce::ScopedLock guard(lock);if(!finished()||!result||result->version!=v||(owner&&owner!=editor))return {};
     owner=editor;downloadDismissed=false;auto notice=result->notice(installed);notice.getDynamicObject()->setProperty("reopened",true);
     if(task){const auto state=task->snapshot();if(state["phase"].toString()=="cancelled")task.reset();else if(const auto* data=state.getDynamicObject()){const auto& props=data->getProperties();for(int i=0;i<props.size();++i)notice.getDynamicObject()->setProperty(props.getName(i),props.getValueAt(i));}}
     return notice;
