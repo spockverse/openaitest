@@ -38,7 +38,7 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
         assert(power.x > preset.x+preset.width && power.y < preset.y+preset.height);
         assert(Math.abs(power.width-power.height)<1 && power.y+power.height < field.y);
         await page.locator('#enginePower').click();
-        assert.equal(await page.locator('#engineStatus').textContent(),'ENGINE OFF');
+        assert.equal(await page.locator('#enginePower').getAttribute('aria-pressed'),'false');
         assert(await page.evaluate(() => messages.some(m => m.type==='parameter' && m.id==='enabled' && m.value===0)));
         for (const enabled of [0,1]) {
           for (const status of ['DNA loaded.', 'Preset controls loaded; its factory WAV has not been supplied. Drop your own WAV into ROT DNA.', 'A long sample analysis diagnostic message '.repeat(12)]) {
@@ -46,10 +46,9 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
               messages=[];
               listeners.wubrotState({enabled,status,editorSize:index,sampleRate:48000,x:0,y:0,mutate:67,drive:8.5,mode:0,preset:0,name:'very-long-factory-sample-name.wav'});
             }, {enabled,status,index});
-            assert.equal(await page.locator('#engineStatus').textContent(),enabled?'ENGINE ACTIVE':'ENGINE OFF');
             assert.equal(await page.locator('#enginePower').getAttribute('aria-pressed'),String(!!enabled));
             assert(await page.evaluate(() => messages.length===0));
-            const boxes = await Promise.all(['#engineStatus','#texture','#motion'].map(s => page.locator(s).boundingBox()));
+            const boxes = await Promise.all(['#motion'].map(s => page.locator(s).boundingBox()));
             const footer=await page.locator('.bottom').boundingBox(),grid=await page.locator('.grid').boundingBox();
             const geometry=JSON.stringify({width,height,deviceScaleFactor,enabled,statusLength:status.length,boxes,footer,grid});
             assert(grid.y+grid.height<=footer.y-4*scale,'main panels overlap footer: '+geometry);
@@ -57,7 +56,8 @@ const fs = require('fs'), assert = require('assert'), path = require('path');
               assert(box.y+box.height <= height-14*scale, 'footer intrudes into bottom border: '+geometry);
               assert(box.x>=20*scale && box.x+box.width<=width-20*scale);
             }
-            assert(boxes[0].x+boxes[0].width<boxes[1].x && boxes[1].x+boxes[1].width<boxes[2].x);
+            assert(Math.abs(boxes[0].x+boxes[0].width-footer.x-footer.width)<1,'Animation control moved away from the footer edge');
+            assert(Math.abs(footer.height-57*scale)<1,'Removing the readouts changed footer spacing');
             assert(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight));
           }
         }

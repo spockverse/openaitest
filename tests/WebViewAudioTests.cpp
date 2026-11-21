@@ -131,7 +131,7 @@ private:
         {
             evaluate(R"JS((()=>{
               if(typeof audioVisual==='undefined'||awaitingNativePower||!jelly.complete)return JSON.stringify({ready:false});
-              if(!motion)document.getElementById('motion').click();if(!liquid)document.getElementById('liquid').click();
+              if(!motion)document.getElementById('motion').click();
               window.__visualProbe={packets:0,received:0,rendered:0,pixelMean:0,geometryMean:0,shaderGain:0,pixelTests:0,frames:0,surges:0,above:false};
               window.__JUCE__.backend.addEventListener('wubrotAudio',d=>{const p=window.__visualProbe;p.packets++;p.received=Math.max(p.received,Number(d.intensity)||0);});
               const original=renderer.render.bind(renderer);renderer.render=(...args)=>{
