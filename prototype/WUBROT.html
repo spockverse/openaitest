@@ -735,7 +735,7 @@ surface.addEventListener('webglcontextrestored',()=>{renderer.dispose();renderer
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frameRequest);frameRequest=0;last=0;renderer.dispose();});
 window.addEventListener('pageshow',()=>{if(!renderer.gl)renderer=new GelRenderer(surface);schedule();});
 function syncButtons(){$('motion').setAttribute('aria-pressed',motion);$('motion').textContent='ANIMATION / '+(motion?'ON':'OFF');xybox.classList.toggle('motion-paused',!motion||(document.hidden&&engineIsOn()));}
-$('motion').onclick=()=>{motion=!motion;last=0;if(engineIsOn())gel.reset();syncButtons();schedule();};
+$('motion').onclick=()=>{motion=!motion;if(motion)liquid=true;last=0;if(engineIsOn())gel.reset();syncButtons();schedule();};
 function controls(){for(const id of ['mutate','drive']){const v=+$(id).value;$(id+'Dial').style.setProperty('--turn',(v/(id==='drive'?36:100)*270)+'deg');$(id+'Value').textContent=id==='drive'?v.toFixed(1):v+'%';}$('influenceValue').textContent=$('influence').value+'%';schedule();}
 for(const id of ['mutate','drive','influence'])$(id).oninput=()=>{controls();if(id!=='influence')nativeParameter(id,+$(id).value);};
 // Relative circular tracking follows the same 270-degree indicator arc.
