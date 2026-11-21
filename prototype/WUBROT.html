@@ -23,6 +23,42 @@ body{padding:12px;background:#08080c}.shell{max-width:1440px;padding:35px 32px 2
    (3.20014 + 2) / 301 of the SVG width; align the subtitle to that edge, not its box.
    Alpha-based shadows preserve crisp cuts and may bloom outside the SVG bounds. */
 .top{gap:20px}.brand-lockup{--wordmark-ink-left:4.372093%;width:500px;max-width:46%;flex:0 1 500px;min-width:0;overflow:visible}.brand-lockup .maker{margin-inline-start:var(--wordmark-ink-left)}.brand{display:flex;align-items:center;width:100%;height:86px;font:inherit;letter-spacing:normal;line-height:1;transform:none;background:none;color:#d8a0ed;filter:none;text-shadow:none}.brand .wordmark{display:block;width:100%;height:auto;overflow:visible;filter:drop-shadow(0 0 1.25px #ffd0ffcc) drop-shadow(0 0 4px #e968ed99) drop-shadow(0 0 8px #b72be76b)}.header-controls{flex-shrink:0}
+</style><style id="release-notice-style">/* Session update notice: the approved editor remains behind frosted glass. */
+.update-layer{position:absolute;inset:0;z-index:1000;display:grid;place-items:center;background:#0302088a;cursor:default}
+.update-layer[hidden]{display:none}
+.update-dialog{box-sizing:border-box;width:640px;min-height:440px;padding:44px 46px 38px;border:1.5px solid #c7b4c8b0;border-radius:14px;background:radial-gradient(ellipse at 0 8%,#ec72babb,transparent 66%),linear-gradient(116deg,#a665995c,#77717c88 63%,#80778e9e);backdrop-filter:blur(14px) saturate(.85);box-shadow:0 16px 45px #0008,inset 0 1px #ffffff12;color:#fff4ff;font-family:"Segoe UI",Arial,sans-serif;text-shadow:0 2px 3px #0006}
+.update-title{height:48px;margin:0 0 40px;display:flex;align-items:center;justify-content:center}
+.update-title svg{display:block;width:488px;height:44px;overflow:visible;filter:drop-shadow(0 0 3px #ed9dff) drop-shadow(0 0 11px #e365f1bb)}
+.update-intro{margin:0 0 10px;font-size:26px;line-height:34px;overflow-wrap:anywhere}
+.update-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:66px;max-height:66px;margin:0 0 14px;font-size:26px;line-height:33px;overflow-wrap:anywhere}
+.update-notes{display:flex;align-items:center;gap:14px;height:40px;padding:0;border:0;background:none;color:#fff4ff;font-family:inherit;font-size:26px;line-height:34px;text-align:left;text-shadow:inherit;cursor:pointer}
+.update-notes svg{width:40px;height:40px;flex:0 0 40px;fill:#e4dfe7;filter:drop-shadow(0 2px 3px #0005)}
+.update-notes:hover{color:#ffcfff;text-decoration:underline;text-underline-offset:4px}
+.update-actions{display:grid;grid-template-columns:205px 1fr;gap:36px;margin-top:43px}
+.update-actions button{height:55px;padding:0 12px;border-radius:11px;font-family:"Courier New",monospace;font-size:24px;line-height:30px;white-space:nowrap;cursor:pointer}
+.update-later{border:1.5px solid #c3b4c4aa;color:#c0b3c2;background:#8e7e9624;box-shadow:inset 0 1px #ffffff0a}
+.update-later:hover{color:#fff0ff;background:#b797bc30;border-color:#f0ccec}
+.update-now{border:1.5px solid #f5adff;color:#fff2ff;background:linear-gradient(#bc23d6,#8a189e 52%,#7c138e);box-shadow:0 0 9px #ff7dff9c,0 0 21px #e127e54d,inset 0 1px 6px #ffb2ffad;text-shadow:0 0 4px #ffffff45}
+.update-now:hover{background:linear-gradient(#d43af0,#a723bd 52%,#9418a8);box-shadow:0 0 13px #ff8cffb0,0 0 26px #e127e56b,inset 0 1px 6px #ffd2ffad}
+.keyboard-nav .update-dialog button:focus-visible{outline:2px solid #ffe0ff;outline-offset:5px}
+.update-actions button:disabled,.update-notes:disabled{opacity:.55;cursor:wait}
+.update-error{margin:12px 0 -28px;color:#ffe5f5;font-size:16px;line-height:20px}
+.update-error[hidden]{display:none}
+.update-title{overflow:visible}.update-dialog[data-progress] .update-title svg{width:560px;max-width:100%}
+.update-download{display:none;margin-top:10px}.update-dialog[data-progress] .update-download{display:block}
+.update-dialog[data-progress] .update-intro,.update-dialog[data-progress] .update-notes{display:none}
+.update-dialog[data-progress] .update-title{margin-bottom:42px}
+.update-dialog[data-progress] .update-summary{margin:24px 0 0;min-height:66px}
+.update-progress{position:relative;height:52px;padding:6px 7px;border:1.5px solid #f7b6ff;border-radius:13px;background:#2d17384d;box-shadow:0 0 13px #f968e580,inset 0 0 6px #a76ab14d;overflow:hidden}
+.update-segments{height:100%;display:grid;grid-template-columns:repeat(26,1fr);gap:3px}
+.update-segments i{display:block;border-radius:3px;background:linear-gradient(#51345188,#38203d77);box-shadow:inset 0 0 0 1px #2a183329}
+.update-segments i.filled{background:linear-gradient(#ffadf4,#f47cdd);box-shadow:0 0 5px #ff9df3b3,inset 0 1px #ffd1f6}
+.update-frontier{position:absolute;top:5px;bottom:5px;left:clamp(8px,var(--fill,0%),calc(100% - 8px));width:3px;background:#fff4ff;border-radius:4px;box-shadow:0 0 9px 5px #ffb7f9,0 0 20px 12px #fa69dba6;transform:translateX(-50%)}
+.update-count{margin:10px 0 0;text-align:right;font-size:24px;line-height:30px;color:#fff0ff;font-variant-numeric:tabular-nums}
+.update-count strong{font-weight:700}
+.update-download-notes{display:none;margin:8px auto -25px;padding:0;border:0;background:none;color:#dfc8e1;font-size:17px;line-height:24px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.update-dialog[data-progress] .update-download-notes{display:block}
+.update-dialog[data-progress] .update-actions{margin-top:26px}
 </style>
 <style>
 /* Only the moving field is layered; the reference artwork and layout stay unchanged. */
@@ -142,7 +178,11 @@ body{transition:background-color 240ms ease}body:has(.shell.power-off){backgroun
   </div>
  </div>
  <footer class="bottom"><span class="status" id="engineStatus" role="status">ENGINE ACTIVE</span><span class="hint" id="texture">48 kHz / STEREO · UI STUDY</span><button class="mini" id="motion" aria-pressed="true">ANIMATION / ON</button></footer>
-<div id="presetDialogLayer" class="preset-dialog-layer" hidden><section id="presetDialog" class="preset-dialog" role="dialog" aria-modal="true" aria-labelledby="presetDialogTitle" aria-describedby="presetDialogText"><h2 id="presetDialogTitle"></h2><p id="presetDialogText"></p><label id="presetNameLabel">PRESET NAME<input id="presetNameInput" maxlength="80" autocomplete="off" spellcheck="false"></label><div id="presetDialogError" class="preset-dialog-error" role="alert"></div><div id="presetDialogButtons" class="preset-dialog-buttons"></div></section></div></main>
+<div id="presetDialogLayer" class="preset-dialog-layer" hidden><section id="presetDialog" class="preset-dialog" role="dialog" aria-modal="true" aria-labelledby="presetDialogTitle" aria-describedby="presetDialogText"><h2 id="presetDialogTitle"></h2><p id="presetDialogText"></p><label id="presetNameLabel">PRESET NAME<input id="presetNameInput" maxlength="80" autocomplete="off" spellcheck="false"></label><div id="presetDialogError" class="preset-dialog-error" role="alert"></div><div id="presetDialogButtons" class="preset-dialog-buttons"></div></section></div><div id="updateLayer" class="update-layer" hidden><section id="updateDialog" class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="updateTitle" aria-describedby="updateIntro updateSummary">
+<h2 id="updateTitle" class="update-title" aria-label="UPDATE AVAILABLE"><svg id="updateTitleArt" aria-hidden="true" viewBox="0 -1 360 30"><defs><linearGradient id="updateLetterFill" x2="0" y2="1"><stop stop-color="#f9c2ff"/><stop offset=".5" stop-color="#da84ee"/><stop offset="1" stop-color="#edb4fb"/></linearGradient></defs><g id="updateTitleGlyphs" fill="url(#updateLetterFill)" stroke="#ffd1ff" stroke-width=".7" fill-rule="evenodd" stroke-linejoin="round"></g></svg></h2>
+<p id="updateIntro" class="update-intro"></p><div id="updateDownload" class="update-download"><div id="updateProgress" class="update-progress" role="progressbar" aria-label="Update download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="updateSegments" class="update-segments" aria-hidden="true"></div><i id="updateFrontier" class="update-frontier" aria-hidden="true"></i></div><p class="update-count"><strong id="updatePercent">0%</strong><span id="updateAmount"> Complete</span></p></div>
+<p id="updateSummary" class="update-summary"></p><button id="updateNotes" class="update-notes" type="button">View full release notes on Github. <svg aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>GitHub</title><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></button><p id="updateError" class="update-error" role="alert" hidden></p>
+<div class="update-actions"><button id="updateLater" class="update-later" type="button">LATER</button><button id="updateNow" class="update-now" type="button">UPDATE NOW</button></div><button id="updateDownloadNotes" class="update-download-notes" type="button">Release notes on Github</button></section></div></main>
 <p class="notice"><strong>Interactive UI study — no audio processing or playback yet.</strong> Files stay on your computer. Sample loading analyses a waveform to shape the visuals; it does not play or upload your sample. Liquid motion is a lightweight spring animation, independent of the XY control position. Maximum WAV size: 20 MB; first 30 seconds analysed.</p>
 <style>.gpu-scene .orb-aura{visibility:hidden}.gpu-scene .orb-aura,.gpu-scene .orb-aura *{animation-play-state:paused!important}</style>
 <script id="gel-physics">
@@ -838,7 +878,93 @@ if(nativeBackend){
  // The preset module requests the initial state after all UI listeners exist.
 }
 syncButtons();readouts();controls();drawWave();schedule();
+</script><script id="release-notice">
+(()=>{
+ const layer=$('updateLayer'),dialog=$('updateDialog'),notes=$('updateNotes'),downloadNotes=$('updateDownloadNotes'),later=$('updateLater'),now=$('updateNow'),error=$('updateError');
+ let pending=null,current=null,previous=null,busy=false,phase='available',lastBytes=0,lastTotal=0;const seen=new Set(),inertState=new Map();
+ const observer=new MutationObserver(()=>tryShow());
+ const glyphs={
+ A:'M0 28V4L4 0H16L20 4V28H16V18H4V28ZM4 4V14H16V4Z',
+ B:'M0 0H16L20 4V12L17 14L20 16V24L16 28H0ZM4 4V12H16V4ZM4 16V24H16V16Z',
+ D:'M0 0H15L20 5V23L15 28H0ZM4 4V24H13L16 21V7L13 4Z',
+ E:'M0 0H20V4H4V12H17V16H4V24H20V28H0Z',
+ G:'M4 0H20V4H6L4 6V22L6 24H16V17H11V13H20V28H4L0 24V4Z',
+ I:'M2 0H6V28H2Z',
+ F:'M0 0H20V4H4V12H17V16H4V28H0Z',
+ R:'M0 28V0H16L20 4V13L16 17H13L21 28H16L8 17H4V28ZM4 4V13H14L16 11V6L14 4Z',
+ Y:'M0 0H4L10 12L16 0H20L12 17V28H8V17Z',
+ L:'M0 0H4V24H19V28H0Z',
+ N:'M0 28V0H4L16 20V0H20V28H16L4 8V28Z',
+ O:'M4 0H16L20 4V24L16 28H4L0 24V4ZM6 4L4 6V22L6 24H14L16 22V6L14 4Z',
+ P:'M0 28V0H16L20 4V13L16 17H4V28ZM4 4V13H14L16 11V6L14 4Z',
+ T:'M0 0H20V4H12V28H8V4H0Z',
+ U:'M0 0H4V22L6 24H14L16 22V0H20V24L16 28H4L0 24Z',
+ V:'M0 0H4L10 22L16 0H20L13 28H7Z',
+ W:'M0 0H4L7 21L10 9H14L17 21L20 0H24L20 28H15L12 17L9 28H4Z',
+ '0':'M4 0H16L20 4V24L16 28H4L0 24V4ZM6 4L4 6V22L6 24H14L16 22V6L14 4Z',
+ '1':'M4 5L10 0H14V28H10V5L4 10Z',
+ '2':'M0 0H16L20 4V12L4 23V24H20V28H0V21L16 10V6L14 4H0Z',
+ '3':'M0 0H16L20 4V12L17 14L20 16V24L16 28H0V24H14L16 22V18L14 16H5V12H14L16 10V6L14 4H0Z',
+ '4':'M0 0H4V14H14V0H18V28H14V18H0Z',
+ '5':'M0 0H20V4H4V12H16L20 16V24L16 28H0V24H14L16 22V18L14 16H0Z',
+ '6':'M4 0H20V4H6L4 6V12H16L20 16V24L16 28H4L0 24V4ZM4 16V22L6 24H14L16 22V18L14 16Z',
+ '7':'M0 0H20V4L9 28H5L16 4H0Z',
+ '8':'M4 0H16L20 4V12L17 14L20 16V24L16 28H4L0 24V16L3 14L0 12V4ZM6 4L4 6V10L6 12H14L16 10V6L14 4ZM6 16L4 18V22L6 24H14L16 22V18L14 16Z',
+ '9':'M4 0H16L20 4V24L16 28H0V24H14L16 22V16H4L0 12V4ZM6 4L4 6V10L6 12H16V6L14 4Z',
+ '.':'M5 24H9V28H5Z','(':'M10 0H14Q4 14 14 28H10Q0 14 10 0Z',')':'M0 0H4Q14 14 4 28H0Q10 14 0 0Z',v:'M2 9H6L10 23L14 9H18L12 28H8Z'
+ };
+ function title(text){
+  const svg=$('updateTitleArt'),group=$('updateTitleGlyphs');if(svg.dataset.text===text)return;svg.dataset.text=text;group.replaceChildren();let x=0;
+  for(const ch of text){if(ch===' '){x+=12;continue;}const d=glyphs[ch];if(!d)continue;const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);path.setAttribute('transform',`translate(${x},0)`);group.appendChild(path);x+=ch==='I'?12:['.',')','('].includes(ch)?14:ch==='W'?26:22;}
+  svg.setAttribute('viewBox',`-1 -1 ${x+1} 30`);$('updateTitle').setAttribute('aria-label',text);
+ }
+ const send=operation=>nativeEvent('update',{operation,version:current?.version});
+ const numericVersion=()=>current.version.split('+')[0];
+ function blocked(){return document.hidden||awaitingNativePower||dragging||nativeTouches.size||!$('presetDialogLayer').hidden||$('preset').getAttribute('aria-expanded')==='true'||!$('sizePopup').hidden||$('dnaSpeed').getAttribute('aria-expanded')==='true'||document.activeElement?.matches('input,textarea,select');}
+ function setPhase(data={}){
+  if(!current)return;const oldPhase=phase;phase=data.phase||'available';dialog.dataset.phase=phase;const progress=['downloading','verifying','staging','ready','failed','cancelling'].includes(phase);dialog.toggleAttribute('data-progress',progress);
+  const total=Number.isFinite(data.total)?Math.max(0,Math.min(134217728,data.total)):lastTotal,amount=Number.isFinite(data.received)?Math.max(0,Math.min(total||134217728,data.received)):Math.min(lastBytes,total||134217728),percent=total?Math.min(100,Math.floor(amount/total*100)):0;lastTotal=total;lastBytes=amount;
+  title(progress?`${phase==='ready'?'UPDATE READY':phase==='failed'?'UPDATE FAILED':'DOWNLOADING UPDATE'} (v${numericVersion()})`:'UPDATE AVAILABLE');
+  $('updateIntro').textContent=`WUBROT v${current.version} is now available.`;
+  let message=current.summary||'A new version of WUBROT is ready. View the release notes for details.';
+  if(phase==='downloading')message='Downloading the latest WUBROT update. Your current version stays active.';
+  if(phase==='verifying')message='Checking the downloaded update before installation…';
+  if(phase==='staging')message='Preparing automatic installation…';
+  if(phase==='ready')message=data.message||'Close your DAW to install. Reopen it after the update confirmation.';
+  if(phase==='cancelling')message='Cancelling the update…';
+  if(phase==='failed')message=data.message||'The update could not be completed. Your current version is unchanged.';
+  $('updateSummary').textContent=message;
+  $('updateProgress').style.setProperty('--fill',`${percent}%`);$('updateProgress').setAttribute('aria-valuenow',String(percent));
+  const segments=$('updateSegments').children;for(let i=0;i<segments.length;i++)segments[i].classList.toggle('filled',i<Math.ceil(percent/100*segments.length));
+  $('updatePercent').textContent=`${percent}%`;const mb=v=>(v/1e6).toFixed(1);$('updateAmount').textContent=total?` Complete (${mb(amount)} MB / ${mb(total)} MB)`:' Complete';
+  $('updateFrontier').hidden=percent===0||phase==='ready';
+  now.textContent=phase==='ready'?'READY TO INSTALL':phase==='failed'?'RETRY UPDATE':current.version.length<15?`UPDATE NOW (v${current.version})`:'UPDATE NOW';
+  now.disabled=progress&&phase!=='failed';now.setAttribute('aria-label',`Download WUBROT version ${current.version}`);
+  later.textContent=progress&&phase!=='failed'?'CANCEL':'LATER';later.disabled=phase==='cancelling';
+  if(oldPhase!==phase){error.hidden=true;error.textContent='';}notes.disabled=downloadNotes.disabled=busy;
+ }
+ function tryShow(){
+  if(!pending||current||blocked())return;
+  current=pending;pending=null;observer.disconnect();seen.add(current.version);previous=document.activeElement;
+  for(const node of shell.children)if(node!==layer){inertState.set(node,node.inert);node.inert=true;}
+  layer.hidden=false;busy=false;lastBytes=0;lastTotal=Number(current.total)||0;error.hidden=true;setPhase(current);later.focus({preventScroll:true});send('shown');
+ }
+ function close(){if(!current)return;layer.hidden=true;current=null;busy=false;for(const[node,inert]of inertState)node.inert=inert;inertState.clear();if(previous?.isConnected&&previous!==document.body&&!previous.inert)previous.focus({preventScroll:true});else $('preset').focus({preventScroll:true});}
+ function defer(){if(pending)queueMicrotask(tryShow);}
+ later.onclick=()=>{if(['downloading','verifying','staging','ready','cancelling'].includes(phase)){send('cancel');setPhase({phase:'cancelling'});}else{send('later');close();}};
+ notes.onclick=downloadNotes.onclick=()=>{if(current&&!busy){busy=true;notes.disabled=downloadNotes.disabled=true;send('notes');}};
+ now.onclick=()=>{if(!current||now.disabled)return;error.hidden=true;setPhase({phase:'downloading',received:0,total:current.total});send('download');};
+ layer.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();later.click();}else if(event.key==='Tab'){const buttons=[...dialog.querySelectorAll('button')].filter(b=>!b.disabled&&b.getClientRects().length),first=buttons[0],last=buttons.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
+ for(const event of ['pointerup','pointercancel','focusout','keyup','visibilitychange'])document.addEventListener(event,defer);
+ for(let i=0;i<26;i++)$('updateSegments').appendChild(document.createElement('i'));
+ if(nativeBackend){
+  nativeBackend.addEventListener('wubrotUpdate',data=>{if(!data||typeof data.version!=='string'||!/^\d+\.\d+\.\d+(?:\+[A-Za-z0-9.-]+)?$/.test(data.version)||data.version.length>80||seen.has(data.version)||current)return;pending={...data,summary:typeof data.summary==='string'?data.summary.slice(0,240):''};observer.observe(shell,{subtree:true,attributes:true,attributeFilter:['hidden','aria-expanded']});tryShow();});
+  nativeBackend.addEventListener('wubrotUpdateProgress',data=>{if(!current||data?.version!==current.version)return;if(data.phase==='cancelled'){send('later');close();}else setPhase(data);});
+  nativeBackend.addEventListener('wubrotUpdateResult',data=>{if(!current||data?.version!==current.version)return;busy=false;notes.disabled=downloadNotes.disabled=false;if(!data.ok){error.textContent=data.message||'Could not open your browser. Please try again.';error.hidden=false;}});
+ }
+})();
 </script>
+
 </html>
 <script>
 (()=>{const settings=document.getElementById('sizeSettings'),popup=document.getElementById('sizePopup'),select=document.getElementById('uiSize');const close=()=>{popup.hidden=true;settings.setAttribute('aria-expanded','false')};const update=()=>popup.querySelectorAll('[data-size]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.size===select.selectedIndex)));settings.onclick=()=>{popup.hidden=!popup.hidden;settings.setAttribute('aria-expanded',String(!popup.hidden));update()};popup.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>{select.selectedIndex=+b.dataset.size;select.dispatchEvent(new Event('change'));update();close();settings.focus()});document.addEventListener('pointerdown',e=>{if(!popup.contains(e.target)&&!settings.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});window.addEventListener('resize',close)})();

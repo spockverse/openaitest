@@ -1,6 +1,11 @@
 name: Build WUBROT Windows
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional stable version, e.g. 1.0.0 (blank uses the development run number)"
+        required: false
+        type: string
   push:
     branches: [main, work, "wubrot/**"]
   pull_request:
@@ -9,12 +14,27 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2022
+    env:
+      WUBROT_DISABLE_UPDATE_CHECKS: "1"
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Select binary version
+        id: buildmeta
+        shell: pwsh
+        env:
+          WUBROT_REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $task_version = $env:WUBROT_REQUESTED_VERSION
+          $task_suffix = ''
+          if ([string]::IsNullOrEmpty($task_version)) { $task_version = '0.2.${{ github.run_number }}'; $task_suffix = '-dev' }
+          if ($task_version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Use a three-part numeric version such as 1.0.0.' }
+          foreach ($task_part in $task_version.Split('.')) { if ([long]$task_part -gt 65535) { throw 'Windows version components must be at most 65535.' } }
+          "version=$task_version" >> $env:GITHUB_OUTPUT
+          "artifact=WUBROT-$task_version$task_suffix-Windows-x64" >> $env:GITHUB_OUTPUT
       - name: Check preset manifests
         run: python tools/validate_factory.py --allow-missing
       - name: Install pinned WebView2 SDK
@@ -33,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          cmake -S . -B build -A x64 "-DWUBROT_VERSION=0.2.${{ github.run_number }}" -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2" *> configure-output.log
+          cmake -S . -B build -A x64 "-DWUBROT_VERSION=${{ steps.buildmeta.outputs.version }}" -DJUCE_WEBVIEW2_PACKAGE_LOCATION="${{ github.workspace }}/webview2" *> configure-output.log
           $task_status = $LASTEXITCODE
           Get-Content configure-output.log
           if ($task_status -ne 0) { python tools/ci_error_annotation.py configure-output.log }
@@ -89,7 +109,7 @@ jobs:
           New-Item -ItemType Directory -Force build/EditorScreenshots | Out-Null
           $env:WUBROT_SCREENSHOTS = Join-Path $PWD 'build/EditorScreenshots'
           $env:WUBROT_VISUAL_TRACE = Join-Path $PWD 'build/VisualTelemetry.json'
-          foreach ($task_test in @('FreshInstance', 'PresetBrowser', 'PowerShutdown', 'AudioReactiveField', 'StationaryGrid', 'EnergyScene', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
+          foreach ($task_test in @('UpdateNotice', 'FreshInstance', 'PresetBrowser', 'PowerShutdown', 'AudioReactiveField', 'StationaryGrid', 'EnergyScene', 'DnaControls', 'RegionEditor', 'SizePopup', 'OrbAlignment', 'SampleLoading', 'WubrotMotionTests')) {
             node "tests/$task_test.cjs" *> browser-test-output.log
             $task_browser_status = $LASTEXITCODE
             Get-Content browser-test-output.log
@@ -102,14 +122,14 @@ jobs:
         if: always() && hashFiles('build/EditorScreenshots/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-UI-Checks-0.2.${{ github.run_number }}
+          name: WUBROT-UI-Checks-${{ steps.buildmeta.outputs.version }}
           path: build/EditorScreenshots/
           retention-days: 90
           if-no-files-found: error
       - name: Upload portable development ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-0.2.${{ github.run_number }}-dev-Windows-x64
+          name: ${{ steps.buildmeta.outputs.artifact }}
           path: build/WUBROT_artefacts/Release/VST3/
           retention-days: 90
           if-no-files-found: error
@@ -117,7 +137,7 @@ jobs:
         if: always() && hashFiles('build/Performance/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: WUBROT-Performance-0.2.${{ github.run_number }}
+          name: WUBROT-Performance-${{ steps.buildmeta.outputs.version }}
           path: build/Performance/*-callback.json
           retention-days: 90
           if-no-files-found: error

@@ -5,6 +5,22 @@
 #include <iostream>
 #include <thread>
 
+namespace {
+class ReleaseFixture final:public WubrotUpdates::Transport {
+public:
+ juce::String tag;
+ explicit ReleaseFixture(juce::String v):tag(std::move(v)){}
+ juce::String fetch()override{return "{\"tag_name\":\"v"+tag+"\",\"draft\":false,\"prerelease\":false,\"body\":\"Native update bridge fixture.\",\"assets\":[{\"name\":\"WUBROT-Windows-x64.zip\",\"state\":\"uploaded\",\"size\":4000000,\"digest\":\"sha256:"+juce::String::repeatedString("a",64)+"\"}]}";}
+ void cancel()override{}
+};
+class ProgressFixture final:public WubrotUpdates::DownloadTask {
+public:
+ juce::String version,phase="downloading";int starts=0,cancels=0;
+ explicit ProgressFixture(juce::String v):version(std::move(v)){}
+ void start()override{++starts;}void cancel()override{++cancels;phase="cancelled";}
+ juce::var snapshot()const override{auto d=std::make_unique<juce::DynamicObject>();d->setProperty("phase",phase);d->setProperty("version",version);d->setProperty("received",2400000);d->setProperty("total",4000000);return juce::var(d.release());}
+};
+}
 class WubrotWebViewProbe : private juce::Timer
 {
 public:
@@ -15,7 +31,7 @@ public:
             const int kind=input.load();for(int i=0;i<480;++i,++sample){const float t=sample/48000.0f,part=std::fmod(t,.3f);const float env=part<.21f?1.0f:.58f;const float wave=kind==2?.7f*std::sin(t*7539.82237f)+.3f*std::sin(t*5026.54825f):(std::sin(t*408.407045f)>0?1.0f:-1.0f);const float v=kind==0?0:.55f*env*wave;buffer.setSample(0,i,v);buffer.setSample(1,i,-v);}processor.processBlock(buffer,midi);next+=std::chrono::milliseconds(10);std::this_thread::sleep_until(next);
         }});
     }
-    ~WubrotWebViewProbe() override {life.reset();stopTimer();stop.store(true);if(audio.joinable())audio.join();}
+    ~WubrotWebViewProbe() override {if(updateFixture){updateFixture->release(&editor);editor.updates=nullptr;editor.updateLauncher=[](const juce::String&){return false;};}life.reset();stopTimer();stop.store(true);if(audio.joinable())audio.join();}
     int result=1;
 private:
     void evaluate(const juce::String& script,std::function<void(juce::var)> callback)
@@ -82,8 +98,23 @@ private:
             if(xyStage>=8&&(!bool(v["off"])||int(v["frameRequest"])!=0||v["glow"].toString()!="none"))return;
             xyMetrics.add(v);
             if(xyStage==3){if(processor.saveUserPreset("XY Recall").failed()){finish("XY preset save failed");return;}processor.getStateInformation(xyProject);}
-            if(++xyStage==10){std::cout<<"PASS actual WebView XY numeric controls -> native parameters, independent/simultaneous host updates, circular projection, preset/project recall and OFF interactivity\n";finish();return;}
+            if(++xyStage==10){std::cout<<"PASS actual WebView XY numeric controls -> native parameters, independent/simultaneous host updates, circular projection, preset/project recall and OFF interactivity\n";xyFinished=true;return;}
             xySent=false;stageStart=now;
+        });
+    }
+    void checkUpdates()
+    {
+        if(!updateFixture){
+            const auto major=juce::String(WUBROT_CURRENT_VERSION).upToFirstOccurrenceOf(".",false,false).getIntValue();updateVersion=juce::String(major+1)+".0.0";
+            updateFixture=std::make_unique<WubrotUpdates::Session>(WUBROT_CURRENT_VERSION,std::make_unique<ReleaseFixture>(updateVersion),true,[this](const WubrotUpdates::Release& release){auto p=std::make_unique<ProgressFixture>(release.version);progressFixture=p.get();return p;});
+            if(editor.updates)editor.updates->release(&editor);editor.updates=updateFixture.get();editor.updateSent=false;editor.lastUpdateProgress.clear();
+            editor.updateLauncher=[this](const juce::String& url){updateNotes=url;return true;};updateFixture->checkOnce();return;
+        }
+        evaluate(R"JS(JSON.stringify({open:!document.getElementById('updateLayer').hidden,percent:document.getElementById('updatePercent').textContent,intro:document.getElementById('updateIntro').textContent,inert:document.querySelector('.grid').inert}))JS",[this](juce::var state){
+            if(updateStage==0&&bool(state["open"])) {updateStage=1;evaluate("document.getElementById('updateNotes').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==1&&updateNotes.endsWith("/releases/tag/v"+updateVersion)){updateStage=2;evaluate("document.getElementById('updateNow').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==2&&state["percent"].toString()=="60%"&&progressFixture&&progressFixture->starts==1){updateStage=3;evaluate("document.getElementById('updateLater').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==3&&!bool(state["open"])&&!bool(state["inert"])&&progressFixture->cancels==1){std::cout<<"PASS actual native update notice -> notes link, download command, byte progress, cancellation and restored editor interaction\n";finish();}
         });
     }
     void timerCallback() override
@@ -143,7 +174,7 @@ private:
             }
             return;
         }
-        if(visualFinished){if(!presetFinished)checkPresetBrowser();else checkXYControls(now);return;}
+        if(visualFinished){if(!presetFinished)checkPresetBrowser();else if(!xyFinished)checkXYControls(now);else checkUpdates();return;}
         const double durations[]{900,1900,650,1900,650,900,1300};
         evaluate(R"JS(JSON.stringify({...window.__visualProbe,value:audioVisual.value,target:audioVisual.target,off:!engineIsOn(),x:px,y:py,frameRequest,receivedAge:performance.now()-audioVisual.received}))JS",[this,now,duration=durations[stage]](juce::var metrics){
             lastMetrics=metrics;
@@ -162,6 +193,7 @@ private:
     }
     WubrotProcessor& processor;WubrotEditor& editor;
     std::thread audio;std::atomic<bool>stop{false};std::atomic<int>input{0};
+    bool xyFinished=false;int updateStage=0;juce::String updateNotes,updateVersion;std::unique_ptr<WubrotUpdates::Session> updateFixture;ProgressFixture* progressFixture=nullptr;
     bool presetFinished=false,xySent=false;int xyStage=0,xyAck=0;juce::MemoryBlock xyProject;juce::Array<juce::var> xyMetrics;
     bool visualFinished=false,presetProbeStarted=false;juce::var presetMetrics;
     bool pending=false,installed=false,driveBridgeSent=false,mutateBridgeSent=false;int mutateBridgeStage=0;juce::Array<juce::var> mutateBridgeValues;int driveBridgeStage=0;juce::Array<juce::var> driveBridgeValues;int stage=0;double started=0,stageStart=0;juce::String lastError;juce::var lastMetrics;

@@ -76,7 +76,7 @@ For development, set the non-secret `WUBROT_CONTENT_DIR` variable to the **Resou
 
 ## Downloading and replacing development builds
 
-Open this repository's **Actions → Build WUBROT Windows**. Select a successful run and download **WUBROT-0.2.RUNNUMBER-dev-Windows-x64** from **Artifacts** at the bottom of the run page. GitHub downloads it as a ZIP. Each run has a unique version number; previous ZIPs remain available for 90 days. Download local backups for longer-term rollback. No installer or public release is created automatically.
+Open this repository's **Actions → Build WUBROT Windows**. Select a successful run and download **WUBROT-0.2.RUNNUMBER-dev-Windows-x64** from **Artifacts** at the bottom of the run page. GitHub downloads it as a ZIP. Each run has a unique version number; previous ZIPs remain available for 90 days. Download local backups for longer-term rollback. No standalone installer or public release is created automatically.
 
 1. Close FL Studio and any other DAW using WUBROT.
 2. Extract the ZIP. Remove/replace the old outer `C:\Program Files\Common Files\VST3\WUBROT.vst3` folder with the new outer **WUBROT.vst3 folder**, including all its contents.
@@ -93,6 +93,14 @@ The current release target is **Windows x64 VST3**: FL Studio, Ableton Live, Cub
 macOS, Audio Units, Logic Pro and Linux releases are deferred. There is no current macOS installer or AU build workflow. Source code is portable for local testing, but only Windows is being packaged now.
 
 Windows development builds are unsigned. Signing remains a release task.
+
+## In-plugin updates
+
+This build checks the repository's latest **public stable GitHub Release** once per DAW process session when an editor opens. Development Actions artifacts, drafts, prereleases, unavailable networks and rate limits do not produce prompts. LATER dismisses the notice for that session. Existing users must install an updater-capable build once.
+
+UPDATE NOW downloads inside WUBROT, shows actual byte progress, and checks the asset's GitHub SHA-256 digest and archive paths/size. CANCEL leaves the installed version alone. A bundled helper waits for the DAW to exit before swapping the complete bundle, retaining a rollback copy. Windows may request administrator approval for protected installation folders. Wait for its completion confirmation before reopening the DAW. No running DAW is terminated. Projects, user presets and embedded DNA outside the bundle are untouched.
+
+For a stable build, manually dispatch **Build WUBROT Windows** with `version` set to the intended three-part release version (for example `1.0.0`). Attach the successful Windows ZIP to the latest GitHub Release tagged `v1.0.0`. The tag must match the binary version. Keep `WUBROT`, `Windows`, `x64` and `.zip` in the asset name. GitHub supplies its `sha256:` asset digest; releases without a supported ZIP/digest are not offered. Publishing remains a separate developer action; this workflow does not publish releases.
 
 ## Developer build
 

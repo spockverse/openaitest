@@ -35,6 +35,7 @@ WubrotEditor::WubrotEditor(WubrotProcessor& p) : AudioProcessorEditor(p), proces
     setResizable(false, false);
     applyEditorSize();
 }
+WubrotEditor::~WubrotEditor(){stopTimer();if(updates)updates->release(this);}
 void WubrotEditor::applyEditorSize()
 {
     const int index = processor.editorSize.load();
@@ -49,6 +50,18 @@ void WubrotEditor::resized() { if (browser) browser->setBounds(getLocalBounds())
 void WubrotEditor::handleEvent(const juce::var& event)
 {
     const auto type = event["type"].toString();
+    if(type=="update"&&updates){
+        const auto operation=event["operation"].toString(),version=event["version"].toString();
+        if(operation=="shown")updates->shown(this,version);
+        else if(operation=="later")updates->later(this,version);
+        else if(operation=="cancel")updates->cancel(this,version);
+        else if(operation=="download"){
+            const auto started=updates->download(this,version);if(started.failed()){auto data=std::make_unique<juce::DynamicObject>();data->setProperty("version",version);data->setProperty("phase","failed");data->setProperty("message",started.getErrorMessage());browser->emitEventIfBrowserIsVisible("wubrotUpdateProgress",juce::var(data.release()));}
+        }else if(operation=="notes"){
+            const auto link=updates->link(this,version,true);const bool ok=link.isNotEmpty()&&updateLauncher(link);auto data=std::make_unique<juce::DynamicObject>();data->setProperty("version",version);data->setProperty("operation",operation);data->setProperty("ok",ok);browser->emitEventIfBrowserIsVisible("wubrotUpdateResult",juce::var(data.release()));
+        }
+        return;
+    }
     if (type == "uiSize")
     {
         const int index = juce::jlimit(0, 2, static_cast<int>(event["index"]));
@@ -93,7 +106,7 @@ void WubrotEditor::handleEvent(const juce::var& event)
     }
     else if(type=="dropError")processor.reportSampleError("This drag source did not provide a readable file. Use the upload icon to select a local WAV or MP3.");
     else if (type == "clear") processor.clearSample();
-    else if (type == "ready") { frontendReady=true;visualBridgeReady=false;waveformSent=false;xyWriteAck=0;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
+    else if (type == "ready") { frontendReady=true;updateSent=false;lastUpdateProgress.clear();if(!updates)updates=&WubrotUpdates::Session::shared(WUBROT_CURRENT_VERSION);updates->checkOnce();visualBridgeReady=false;waveformSent=false;xyWriteAck=0;lastState.clear();lastPlayhead=-1;processor.presetCommand(juce::JSON::parse("{\"operation\":\"refresh\"}")); }
     else if (type == "visualReady")
     {
         // The page has installed its listener AND applied its first power/state
@@ -135,7 +148,11 @@ void WubrotEditor::timerCallback()
             browser->emitEventIfBrowserIsVisible("wubrotAudio",juce::var(data.release()));lastAudioLevel=intensity;
         }
     }
-    if(++uiTicks%3!=0)return;
+    if(++uiTicks%6==0&&updates){
+        if(!updateSent){const auto notice=updates->claim(this);if(notice.isObject()){browser->emitEventIfBrowserIsVisible("wubrotUpdate",notice);updateSent=true;}}
+        const auto progress=updates->progress(this);if(progress.isObject()){const auto json=juce::JSON::toString(progress,true);if(json!=lastUpdateProgress){lastUpdateProgress=json;browser->emitEventIfBrowserIsVisible("wubrotUpdateProgress",progress);}}
+    }
+    if(uiTicks%3!=0)return;
     const auto revision=processor.presetLibraryRevision();
     if(lastCatalogueRevision!=revision){browser->emitEventIfBrowserIsVisible("wubrotPresetLibrary",processor.presetCatalogue());lastCatalogueRevision=revision;}
     auto state = processor.uiState(false);

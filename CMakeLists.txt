@@ -74,8 +74,8 @@ juce_add_plugin(WUBROT
     IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE VST3_CATEGORIES Fx Distortion
     NEEDS_WEBVIEW2 ${WUBROT_WEB_UI})
-target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/PresetLibrary.cpp Source/PresetManagement.cpp)
-target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}>
+target_sources(WUBROT PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/PresetLibrary.cpp Source/PresetManagement.cpp Source/UpdateChecker.cpp Source/UpdatePackage.cpp)
+target_compile_definitions(WUBROT PUBLIC WUBROT_WEB_UI=$<BOOL:${WUBROT_WEB_UI}> WUBROT_CURRENT_VERSION="${PROJECT_VERSION}"
     JUCE_USE_MP3AUDIOFORMAT=1 JUCE_WEB_BROWSER=$<BOOL:${WUBROT_WEB_UI}> JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 if(WIN32 AND WUBROT_WEB_UI)
     include(cmake/WubrotWebViewPolicy.cmake)
@@ -86,7 +86,33 @@ if(WUBROT_WEB_UI)
     juce_add_binary_data(WubrotWebAssets HEADER_NAME WubrotAssets.h NAMESPACE WubrotAssets SOURCES prototype/WUBROT.html)
     target_link_libraries(WUBROT PRIVATE WubrotWebAssets)
 endif()
-target_link_libraries(WUBROT PRIVATE juce::juce_audio_utils PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+target_link_libraries(WUBROT PRIVATE juce::juce_audio_utils juce::juce_cryptography PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+add_executable(WubrotUpdateTests tests/UpdateTests.cpp)
+target_include_directories(WubrotUpdateTests PRIVATE Source ${juce_SOURCE_DIR}/modules)
+target_compile_definitions(WubrotUpdateTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+target_link_libraries(WubrotUpdateTests PRIVATE WUBROT)
+add_test(NAME WubrotUpdates COMMAND WubrotUpdateTests)
+set_tests_properties(WubrotUpdates PROPERTIES TIMEOUT 30)
+if(WIN32)
+    juce_add_gui_app(WubrotUpdater PRODUCT_NAME "WUBROT Updater" COMPANY_NAME "WUBWARE AUDIO")
+    target_sources(WubrotUpdater PRIVATE Source/UpdaterMain.cpp Source/UpdatePackage.cpp)
+    target_include_directories(WubrotUpdater PRIVATE Source)
+    target_compile_definitions(WubrotUpdater PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_USE_CURL=0)
+    target_link_libraries(WubrotUpdater PRIVATE juce::juce_core juce::juce_cryptography version shell32 rstrtmgr)
+    add_library(WubrotUpdateOldFixture SHARED tests/UpdateOldFixture.cpp tests/UpdateOldFixture.rc)
+    add_executable(WubrotUpdaterWindowsTests tests/UpdaterWindowsTests.cpp Source/UpdatePackage.cpp)
+    target_include_directories(WubrotUpdaterWindowsTests PRIVATE Source)
+    target_compile_definitions(WubrotUpdaterWindowsTests PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_USE_CURL=0 WUBROT_TEST_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(WubrotUpdaterWindowsTests PRIVATE juce::juce_core juce::juce_cryptography version)
+    add_dependencies(WubrotUpdaterWindowsTests WUBROT_VST3 WubrotUpdateOldFixture)
+    add_test(NAME WubrotActualWindowsUpdater COMMAND WubrotUpdaterWindowsTests "$<TARGET_FILE:WubrotUpdater>" "$<TARGET_FILE_DIR:WUBROT_VST3>/../.." "$<TARGET_FILE:WubrotUpdateOldFixture>")
+    set_tests_properties(WubrotActualWindowsUpdater PROPERTIES TIMEOUT 90)
+    add_dependencies(WUBROT_VST3 WubrotUpdater)
+    add_custom_command(TARGET WUBROT_VST3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:WUBROT_VST3>/../Resources"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:WubrotUpdater>" "$<TARGET_FILE_DIR:WUBROT_VST3>/../Resources/WubrotUpdater.exe")
+endif()
 
 add_executable(WubrotIntegrationTests)
 target_sources(WubrotIntegrationTests PRIVATE tests/ProcessorTests.cpp)

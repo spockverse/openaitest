@@ -1,11 +1,13 @@
 #pragma once
 #include "PluginProcessor.h"
+#include "UpdateChecker.h"
 #if WUBROT_WEB_UI
 #include <juce_gui_extra/juce_gui_extra.h>
 class WubrotEditor final : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
     explicit WubrotEditor(WubrotProcessor&);
+    ~WubrotEditor() override;
     void resized() override;
     bool isInterestedInFileDrag(const juce::StringArray& files) override { return !files.isEmpty(); }
     void filesDropped(const juce::StringArray& files,int,int) override { if(!files.isEmpty())processor.loadSampleFile(juce::File(files[0])); }
@@ -27,6 +29,9 @@ private:
     void handleEvent(const juce::var&);
     void applyEditorSize();
     void timerCallback() override;
+    WubrotUpdates::Session* updates=nullptr;
+    bool updateSent=false;juce::String lastUpdateProgress;
+    std::function<bool(const juce::String&)> updateLauncher=[](const juce::String& url){return juce::URL(url).launchInDefaultBrowser();};
     WubrotProcessor& processor;
     std::unique_ptr<Browser> browser;
     juce::String lastState,lastWaveformRevision;bool waveformSent=false;
