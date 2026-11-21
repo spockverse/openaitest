@@ -43,6 +43,7 @@ public:
     void release(const void* editor);
     void shown(const void* editor, const juce::String& version);
     void later(const void* editor, const juce::String& version);
+    juce::var reopen(const void* editor, const juce::String& version);
     juce::Result download(const void* editor,const juce::String& version);
     void cancel(const void* editor,const juce::String& version);
     juce::var progress(const void* editor);

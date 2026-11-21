@@ -257,12 +257,20 @@ juce::var Session::claim(const void* editor)
     if(!finished()) return {};
     const juce::ScopedLock guard(lock);
     const auto progress=task?task->snapshot():juce::var();const auto phase=progress["phase"].toString();const bool active=phase=="downloading"||phase=="verifying"||phase=="staging"||phase=="cancelling"||phase=="ready";
+    if(result&&announced&&downloadDismissed){auto notice=result->notice(installed);notice.getDynamicObject()->setProperty("phase","minimized");return notice;}
     if(!result || (announced&&(!active||downloadDismissed)) || (owner && owner!=editor)) return {};
     owner=editor;auto notice=result->notice(installed);if(task){const auto state=task->snapshot();const auto& props=state.getDynamicObject()->getProperties();for(int i=0;i<props.size();++i)notice.getDynamicObject()->setProperty(props.getName(i),props.getValueAt(i));}return notice;
 }
 void Session::release(const void* editor) {const juce::ScopedLock guard(lock);if(owner==editor)owner=nullptr;}
 void Session::shown(const void* editor,const juce::String& v) {const juce::ScopedLock guard(lock);if(owns(editor,v))announced=true;}
 void Session::later(const void* editor,const juce::String& v) {const juce::ScopedLock guard(lock);if(owns(editor,v)){announced=true;downloadDismissed=true;owner=nullptr;}}
+juce::var Session::reopen(const void* editor,const juce::String& v)
+{
+    const juce::ScopedLock guard(lock);if(!result||result->version!=v||(owner&&owner!=editor))return {};
+    owner=editor;downloadDismissed=false;auto notice=result->notice(installed);notice.getDynamicObject()->setProperty("reopened",true);
+    if(task){const auto state=task->snapshot();if(state["phase"].toString()=="cancelled")task.reset();else if(const auto* data=state.getDynamicObject()){const auto& props=data->getProperties();for(int i=0;i<props.size();++i)notice.getDynamicObject()->setProperty(props.getName(i),props.getValueAt(i));}}
+    return notice;
+}
 juce::Result Session::download(const void* editor,const juce::String& v)
 {
     const juce::ScopedLock guard(lock);if(!owns(editor,v))return juce::Result::fail("This update is no longer available.");

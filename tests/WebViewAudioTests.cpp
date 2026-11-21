@@ -110,11 +110,13 @@ private:
             if(editor.updates)editor.updates->release(&editor);editor.updates=updateFixture.get();editor.updateSent=false;editor.lastUpdateProgress.clear();
             editor.updateLauncher=[this](const juce::String& url){updateNotes=url;return true;};updateFixture->checkOnce();return;
         }
-        evaluate(R"JS(JSON.stringify({open:!document.getElementById('updateLayer').hidden,percent:document.getElementById('updatePercent').textContent,intro:document.getElementById('updateIntro').textContent,inert:document.querySelector('.grid').inert}))JS",[this](juce::var state){
+        evaluate(R"JS(JSON.stringify({open:!document.getElementById('updateLayer').hidden,percent:document.getElementById('updatePercent').textContent,intro:document.getElementById('updateIntro').textContent,inert:document.querySelector('.grid').inert,badge:!document.getElementById('updateBadge').hidden}))JS",[this](juce::var state){
             if(updateStage==0&&bool(state["open"])) {updateStage=1;evaluate("document.getElementById('updateNotes').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==1&&updateNotes.endsWith("/releases/tag/v"+updateVersion)){updateStage=2;evaluate("document.getElementById('updateNow').click();JSON.stringify({ok:true})",[](juce::var){});}
             else if(updateStage==2&&state["percent"].toString()=="60%"&&progressFixture&&progressFixture->starts==1){updateStage=3;evaluate("document.getElementById('updateLater').click();JSON.stringify({ok:true})",[](juce::var){});}
-            else if(updateStage==3&&!bool(state["open"])&&!bool(state["inert"])&&progressFixture->cancels==1){std::cout<<"PASS actual native update notice -> notes link, download command, byte progress, cancellation and restored editor interaction\n";finish();}
+            else if(updateStage==3&&!bool(state["open"])&&!bool(state["inert"])&&bool(state["badge"])&&progressFixture->cancels==1){updateStage=4;progressFixture=nullptr;evaluate("document.getElementById('updateBadge').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==4&&bool(state["open"])&&!bool(state["badge"])){updateStage=5;evaluate("document.getElementById('updateLater').click();JSON.stringify({ok:true})",[](juce::var){});}
+            else if(updateStage==5&&!bool(state["open"])&&!bool(state["inert"])&&bool(state["badge"])){std::cout<<"PASS actual native update notice -> notes link, download command, byte progress, cancellation, minimized badge and reopen\n";finish();}
         });
     }
     void timerCallback() override
