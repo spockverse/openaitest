@@ -45,7 +45,7 @@ int main(int argc,char** argv)
         need(updater.running()&&host.running()&&hashFile(moduleFile(target))==oldHash,"Updater changed or terminated a running host");
         if(test==1){work.getChildFile("cancel.flag").replaceWithText("1");need(updater.wait()==0&&host.running()&&hashFile(moduleFile(target))==oldHash,"Queued update cancellation failed");}
         else{stop.replaceWithText("stop");need(host.wait()==0,"DLL holder failed");const auto result=updater.wait();
-            if(test==0){need(result==0,"Real Windows helper install failed");need(validateModule(moduleFile(target),WUBROT_TEST_VERSION).wasOk(),"Wrong installed version");need(hashFile(moduleFile(work.getChildFile("rollback/WUBROT.vst3")))==oldHash,"Real helper lost rollback copy");}
+            if(test==0){if(result!=0)std::cerr<<"Helper exit="<<result<<" status="<<status.loadFileAsString()<<'\n';need(result==0,"Real Windows helper install failed");need(validateModule(moduleFile(target),WUBROT_TEST_VERSION).wasOk(),"Wrong installed version");need(hashFile(moduleFile(work.getChildFile("rollback/WUBROT.vst3")))==oldHash,"Real helper lost rollback copy");}
             else need(result!=0&&hashFile(moduleFile(target))==oldHash,"Tampered ZIP replaced installed files");
         }
     }
